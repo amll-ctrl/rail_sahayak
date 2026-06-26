@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "396156224056",
+    "project_id": "rail-sahayak-1a4f3",
+    "storage_bucket": "rail-sahayak-1a4f3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:396156224056:android:152b355afbcec46abcdccd",
+        "android_client_info": {
+          "package_name": "com.railsahayak.rail_sahayak"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCowqJrqksCb8WnnaepGeDJiOx96r8bwXQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
