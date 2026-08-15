@@ -82,7 +82,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Pre-fill fields for easy demo testing
   void _useDemoLogin(bool isStaffUser) {
     setState(() {
       _isStaff = isStaffUser;
@@ -95,6 +94,53 @@ class _LoginScreenState extends State<LoginScreen> {
         _passwordController.text = 'password123';
       }
     });
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    FocusScope.of(context).unfocus();
+
+    final provider = Provider.of<RequestProvider>(
+      context,
+      listen: false,
+    );
+
+    final success = await provider.signInWithGoogle();
+
+    if (!mounted) return;
+
+    if (success) {
+      final user = provider.currentUser;
+
+      final needsProfile = provider.needsProfileCompletion;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            needsProfile
+                ? 'Google account connected. Please complete your profile.'
+                : 'Welcome ${user?.name ?? 'User'}!',
+          ),
+          backgroundColor: Colors.green.shade700,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+
+      // Do NOT navigate directly to PassengerHome here.
+      // MyApp watches RequestProvider and will automatically route to:
+      //   - ProfileCompletionScreen when the Google profile is incomplete
+      //   - PassengerHome when the profile is complete
+      // This prevents the phone/profile screen from flashing and being skipped.
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Google sign-in failed. Please try again.',
+          ),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
@@ -286,7 +332,6 @@ class _LoginScreenState extends State<LoginScreen> {
                               return 'Please enter your email or username';
                             }
 
-                            // If it contains @, validate it as an email.
                             if (identifier.contains('@')) {
                               final emailRegex = RegExp(
                                 r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
@@ -296,7 +341,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 return 'Please enter a valid email address';
                               }
                             } else {
-                              // Otherwise treat it as a username.
                               if (identifier.length < 3) {
                                 return 'Username must be at least 3 characters';
                               }
@@ -390,6 +434,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         const SizedBox(height: 16),
 
+                        // Google Sign-In
+                        SizedBox(
+                          width: double.infinity,
+                          height: 52,
+                          child: OutlinedButton.icon(
+                            onPressed:
+                                isLoading ? null : _handleGoogleSignIn,
+                            icon: const Icon(
+                              Icons.account_circle,
+                              size: 26,
+                            ),
+                            label: const Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
                         // Sign Up
                         TextButton(
                           onPressed: isLoading
@@ -452,9 +519,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-
                             const SizedBox(width: 8),
-
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: isLoading

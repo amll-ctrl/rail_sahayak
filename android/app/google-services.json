@@ -12,7 +12,20 @@
           "package_name": "com.railsahayak.rail_sahayak"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "396156224056-mo9c3erc1btht0utm86bpjekut6h905g.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.railsahayak.rail_sahayak",
+            "certificate_hash": "ca9b57cd3904bc807c0562a7a64971f282563d7a"
+          }
+        },
+        {
+          "client_id": "396156224056-o3fsqtogs2kfnaphssd9qo7s7299m9s3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyCowqJrqksCb8WnnaepGeDJiOx96r8bwXQ"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "396156224056-o3fsqtogs2kfnaphssd9qo7s7299m9s3.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }
