@@ -1,1 +1,26 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"rail-sahayak-1a4f3","appId":"1:396156224056:android:152b355afbcec46abcdccd","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"rail-sahayak-1a4f3","configurations":{"android":"1:396156224056:android:152b355afbcec46abcdccd","web":"1:396156224056:web:9801e38e8d5afa80bcdccd"}}}}}}
+{
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "rail-sahayak-1a4f3",
+          "appId": "1:396156224056:android:152b355afbcec46abcdccd",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "rail-sahayak-1a4f3",
+          "configurations": {
+            "android": "1:396156224056:android:152b355afbcec46abcdccd",
+            "web": "1:396156224056:web:9801e38e8d5afa80bcdccd"
+          }
+        }
+      }
+    }
+  }
+}
