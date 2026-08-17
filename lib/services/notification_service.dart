@@ -27,11 +27,13 @@ class NotificationService {
   StreamSubscription<String>? _tokenRefreshSubscription;
   StreamSubscription<RemoteMessage>? _messageSubscription;
   StreamSubscription<RemoteMessage>? _openedMessageSubscription;
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _profileSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _staffRequestSubscription;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _passengerRequestSubscription;
 
   bool _staffRequestListenerInitialized = false;
   bool _passengerRequestListenerInitialized = false;
+  String? _notificationListenerUserId;
 
   Future<void> initialize() async {
     if (kIsWeb) {
@@ -74,14 +76,14 @@ class NotificationService {
       await _stopFirestoreNotificationListeners();
       if (user != null) {
         await _saveTokenForUser(user);
-        await _startFirestoreNotificationListeners(user);
+        await _watchUserProfile(user);
       }
     });
 
     final currentUser = _auth.currentUser;
     if (currentUser != null) {
       await _saveTokenForUser(currentUser);
-      await _startFirestoreNotificationListeners(currentUser);
+      await _watchUserProfile(currentUser);
     }
 
     await _tokenRefreshSubscription?.cancel();
@@ -119,21 +121,31 @@ class NotificationService {
   // Free fallback: Firestore realtime listeners notify the user with a local
   // notification while the app process is alive. This does not replace
   // server-triggered FCM for a completely killed app.
-  Future<void> _startFirestoreNotificationListeners(User user) async {
-    await _stopFirestoreNotificationListeners();
+  Future<void> _watchUserProfile(User user) async {
+    await _profileSubscription?.cancel();
 
-    try {
-      final profileDoc = await _firestore.collection('users').doc(user.uid).get();
-      final role = (profileDoc.data()?['role'] ?? 'passenger').toString().toLowerCase();
+    _notificationListenerUserId = user.uid;
+
+    _profileSubscription = _firestore
+        .collection('users')
+        .doc(user.uid)
+        .snapshots()
+        .listen((snapshot) async {
+      if (_notificationListenerUserId != user.uid) return;
+
+      final data = snapshot.data();
+      final role = (data?['role'] ?? 'passenger').toString().toLowerCase();
+
+      await _stopFirestoreNotificationListeners();
 
       if (role == 'staff') {
         _startStaffRequestListener();
       } else {
         _startPassengerRequestListener(user.uid);
       }
-    } catch (e) {
-      debugPrint('Could not start Firestore notification listener: $e');
-    }
+    }, onError: (Object error, StackTrace stackTrace) {
+      debugPrint('User profile notification listener error: $error');
+    });
   }
 
   void _startStaffRequestListener() {
@@ -272,6 +284,7 @@ class NotificationService {
     await _tokenRefreshSubscription?.cancel();
     await _messageSubscription?.cancel();
     await _openedMessageSubscription?.cancel();
+    await _profileSubscription?.cancel();
     await _stopFirestoreNotificationListeners();
   }
 }
