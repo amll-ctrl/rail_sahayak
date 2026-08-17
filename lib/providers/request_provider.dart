@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -23,17 +24,36 @@ class RequestProvider extends ChangeNotifier {
 
   bool _needsProfileCompletion = false;
 
+  // ---------------------------------------------------------------------------
+  // Phone verification / OTP
+  // ---------------------------------------------------------------------------
+
+  String? _phoneVerificationId;
+  int? _phoneResendToken;
+  String? _pendingVerifiedPhone;
+  bool _phoneVerificationInProgress = false;
+  bool _phoneVerified = false;
+  String? _phoneVerificationError;
+
+  bool get phoneVerificationInProgress =>
+      _phoneVerificationInProgress;
+
+  bool get phoneVerified => _phoneVerified;
+
+  String? get phoneVerificationError =>
+      _phoneVerificationError;
+
   // These are kept for compatibility with the Google
   // authentication flow.
   User? _pendingGoogleUser;
   String? _pendingGoogleEmail;
   String? _pendingGoogleName;
 
-  final List<AssistanceRequest> _mockRequests = [];
-  final Map<String, UserProfile> _mockUsers = {};
+  // Live assistance requests loaded from Firestore.
+  final List<AssistanceRequest> _requests = [];
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _requestsSubscription;
 
   RequestProvider() {
-    _loadMockData();
     _restoreSession();
   }
 
@@ -59,113 +79,18 @@ class RequestProvider extends ChangeNotifier {
       _pendingGoogleEmail ?? '';
 
   List<AssistanceRequest> get requests =>
-      List.unmodifiable(_mockRequests);
+      List.unmodifiable(_requests);
 
   List<AssistanceRequest> get passengerRequests {
-    if (_currentUser == null) {
-      return [];
-    }
+    if (_currentUser == null) return [];
 
-    return _mockRequests
-        .where(
-          (r) => r.passengerId == _currentUser!.id,
-        )
+    return _requests
+        .where((r) => r.passengerId == _currentUser!.id)
         .toList();
   }
 
-  List<AssistanceRequest> get staffRequests {
-    return _mockRequests;
-  }
-
-  // ===========================================================================
-  // MOCK DATA
-  // ===========================================================================
-
-  void _loadMockData() {
-    _mockUsers['passenger1'] = UserProfile(
-      id: 'passenger1',
-      name: 'Ramesh Kumar',
-      username: 'ramesh',
-      email: 'ramesh@gmail.com',
-      phone: '9876543210',
-      role: UserRole.passenger,
-      disabilityType: 'Wheelchair user',
-      preferredAssistance:
-          'Needs boarding ramp assistance and wheelchair transfer.',
-    );
-
-    _mockUsers['staff1'] = UserProfile(
-      id: 'staff1',
-      name: 'Inspector Sunil Dutt',
-      username: 'sunil',
-      email: 'sunil@railnet.gov.in',
-      phone: '9988776655',
-      role: UserRole.staff,
-    );
-
-    _mockRequests.addAll([
-      AssistanceRequest(
-        id: 'req_101',
-        pnr: '4238765410',
-        trainNo: '12626 (Kerala Express)',
-        coach: 'B2',
-        passengerId: 'passenger1',
-        passengerName: 'Ramesh Kumar',
-        passengerPhone: '9876543210',
-        status: 'Assigned',
-        assistanceType: [
-          'Wheelchair boarding assistance',
-          'Luggage support',
-        ],
-        timestamp: DateTime.now().subtract(
-          const Duration(minutes: 45),
-        ),
-        staffId: 'staff1',
-        staffName: 'Inspector Sunil Dutt',
-        notes:
-            'Has heavy luggage, needs wheelchair from main entrance platform 1.',
-      ),
-      AssistanceRequest(
-        id: 'req_102',
-        pnr: '2105432190',
-        trainNo: '12002 (Bhopal Shatabdi)',
-        coach: 'C4',
-        passengerId: 'passenger2',
-        passengerName: 'Saraswathi Devi',
-        passengerPhone: '8877665544',
-        status: 'Requested',
-        assistanceType: [
-          'Elderly assistance',
-          'Guiding hand',
-        ],
-        timestamp: DateTime.now().subtract(
-          const Duration(minutes: 10),
-        ),
-        notes:
-            'Passenger is 82 years old, walking slowly. Needs help climbing steps into the coach.',
-      ),
-      AssistanceRequest(
-        id: 'req_103',
-        pnr: '8765432109',
-        trainNo: '12952 (Mumbai Rajdhani)',
-        coach: 'A1',
-        passengerId: 'passenger3',
-        passengerName: 'Amit Sharma',
-        passengerPhone: '7766554433',
-        status: 'Completed',
-        assistanceType: [
-          'Visual guidance assistance',
-        ],
-        timestamp: DateTime.now().subtract(
-          const Duration(hours: 2),
-        ),
-        staffId: 'staff1',
-        staffName: 'Inspector Sunil Dutt',
-        notes:
-            'Visually impaired. Guided from station entry directly to seat 32.',
-      ),
-    ]);
-  }
+  List<AssistanceRequest> get staffRequests =>
+      List.unmodifiable(_requests);
 
   // ===========================================================================
   // RESTORE FIREBASE SESSION
@@ -210,6 +135,7 @@ class RequestProvider extends ChangeNotifier {
           'Profile incomplete: $_needsProfileCompletion',
         );
 
+        await _startRequestListener();
         notifyListeners();
         return;
       }
@@ -468,6 +394,7 @@ class RequestProvider extends ChangeNotifier {
       _needsProfileCompletion = false;
 
       _clearPendingGoogleProfile();
+      await _startRequestListener();
 
       debugPrint(
         'Login successful: '
@@ -497,7 +424,7 @@ class RequestProvider extends ChangeNotifier {
   // GOOGLE SIGN-IN
   // ===========================================================================
 
-  Future<bool> signInWithGoogle() async {
+  Future<bool> signInWithGoogle({bool isStaff = false}) async {
     _isLoading = true;
     notifyListeners();
 
@@ -590,12 +517,12 @@ class RequestProvider extends ChangeNotifier {
                 .toString()
                 .toLowerCase();
 
-        final userRole =
+        final storedRole =
             roleString == 'staff'
                 ? UserRole.staff
                 : UserRole.passenger;
 
-        _currentUser = UserProfile(
+        final profileUser = UserProfile(
           id: firebaseUser.uid,
           name: profileData['name'] ??
               firebaseUser.displayName ??
@@ -607,7 +534,7 @@ class RequestProvider extends ChangeNotifier {
               googleUser.email,
           phone:
               profileData['phone'] ?? '',
-          role: userRole,
+          role: storedRole,
           disabilityType:
               profileData['disabilityType'],
           preferredAssistance:
@@ -615,8 +542,57 @@ class RequestProvider extends ChangeNotifier {
                   'preferredAssistance'],
         );
 
+        final profileIncomplete =
+            _isProfileIncomplete(profileUser);
+
+        // Google login has the Passenger / Railway Staff selector.
+        //
+        // If this Google profile is incomplete, allow the selected role to
+        // become the role that will be saved when the profile is completed.
+        // This fixes an account that was created by Google but never finished.
+        //
+        // If the profile is already complete, NEVER silently change its role
+        // just because the login toggle was changed. The stored Firestore role
+        // remains authoritative for completed accounts.
+        if (profileIncomplete) {
+          _currentUser = UserProfile(
+            id: profileUser.id,
+            name: profileUser.name,
+            username: profileUser.username,
+            email: profileUser.email,
+            phone: profileUser.phone,
+            role: isStaff
+                ? UserRole.staff
+                : UserRole.passenger,
+            disabilityType:
+                profileUser.disabilityType,
+            preferredAssistance:
+                profileUser.preferredAssistance,
+          );
+        } else {
+          final selectedRole = isStaff
+              ? UserRole.staff
+              : UserRole.passenger;
+
+          if (selectedRole != storedRole) {
+            debugPrint(
+              'Google login rejected: selected role does not match '
+              'the existing account role.',
+            );
+
+            await _auth.signOut();
+            await _googleSignIn.signOut();
+            _currentUser = null;
+            _needsProfileCompletion = false;
+            _clearPendingGoogleProfile();
+            return false;
+          }
+
+          _currentUser = profileUser;
+        }
+
         // -----------------------------------------------------
-        // THIS IS THE IMPORTANT PART
+        // Profile completion check
         // -----------------------------------------------------
 
         _needsProfileCompletion =
@@ -650,6 +626,13 @@ class RequestProvider extends ChangeNotifier {
         _pendingGoogleName =
             _currentUser!.name;
 
+        // Only start the request listener once the account has a usable
+        // RailSahayak profile. Incomplete Google accounts finish profile setup
+        // first, then completeProfile() starts the listener.
+        if (!_needsProfileCompletion) {
+          await _startRequestListener();
+        }
+
         return true;
       }
 
@@ -677,13 +660,13 @@ class RequestProvider extends ChangeNotifier {
       // and provide their phone number first.
 
       _currentUser = UserProfile(
-        id: firebaseUser.uid,
-        name: displayName,
-        username: '',
-        email: email,
-        phone: '',
-        role: UserRole.passenger,
-      );
+  id: firebaseUser.uid,
+  name: displayName,
+  username: '',
+  email: email,
+  phone: '',
+  role: isStaff ? UserRole.staff : UserRole.passenger,
+);
 
       _pendingGoogleUser =
           firebaseUser;
@@ -726,6 +709,306 @@ class RequestProvider extends ChangeNotifier {
   }
 
   // ===========================================================================
+  // PHONE OTP VERIFICATION
+  // ===========================================================================
+
+  String _formatIndianPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'\D'), '');
+
+    if (digits.length == 10) {
+      return '+91$digits';
+    }
+
+    if (digits.length == 12 && digits.startsWith('91')) {
+      return '+$digits';
+    }
+
+    return phone.trim();
+  }
+
+  void _resetPhoneVerificationState() {
+    _phoneVerificationId = null;
+    _phoneResendToken = null;
+    _pendingVerifiedPhone = null;
+    _phoneVerificationInProgress = false;
+    _phoneVerified = false;
+    _phoneVerificationError = null;
+  }
+
+  Future<bool> sendPhoneOtp(
+    String phone, {
+    bool resend = false,
+  }) async {
+    final firebaseUser = _auth.currentUser;
+
+    if (firebaseUser == null) {
+      _phoneVerificationError =
+          'You must be signed in before verifying your phone number.';
+      notifyListeners();
+      return false;
+    }
+
+    final cleanPhone = phone.replaceAll(RegExp(r'[\s-]'), '');
+
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(cleanPhone)) {
+      _phoneVerificationError =
+          'Enter a valid 10-digit Indian phone number.';
+      notifyListeners();
+      return false;
+    }
+
+    final formattedPhone = _formatIndianPhone(cleanPhone);
+
+    _phoneVerificationError = null;
+    _phoneVerified = false;
+
+    // Keep the exact 10-digit number that this OTP belongs to.
+    // completeProfile() uses this value to make sure the verified
+    // number is the same number currently entered in the form.
+    _pendingVerifiedPhone = cleanPhone;
+
+    _phoneVerificationId = null;
+    _phoneVerificationInProgress = true;
+    notifyListeners();
+
+    try {
+      await _auth.verifyPhoneNumber(
+        phoneNumber: formattedPhone,
+        forceResendingToken:
+            resend ? _phoneResendToken : null,
+
+        verificationCompleted:
+            (PhoneAuthCredential credential) async {
+          try {
+            final currentUser = _auth.currentUser;
+
+            if (currentUser == null) {
+              _phoneVerificationError =
+                  'Your sign-in session expired. Please sign in again.';
+              return;
+            }
+
+            await currentUser.linkWithCredential(
+              credential,
+            );
+
+            _phoneVerified = true;
+            _pendingVerifiedPhone = cleanPhone;
+            _phoneVerificationInProgress = false;
+            _phoneVerificationError = null;
+
+            debugPrint(
+              'Phone automatically verified: $formattedPhone',
+            );
+          } on FirebaseAuthException catch (e) {
+            if (e.code == 'credential-already-in-use') {
+              _phoneVerificationError =
+                  'This phone number is already linked to another account.';
+            } else if (e.code == 'provider-already-linked') {
+              _phoneVerified = true;
+              _pendingVerifiedPhone = cleanPhone;
+              _phoneVerificationInProgress = false;
+              _phoneVerificationError = null;
+            } else {
+              _phoneVerificationError =
+                  'Could not link this phone number. Please try again.';
+            }
+
+            debugPrint(
+              'Automatic phone verification error: ${e.code}',
+            );
+          } catch (e) {
+            _phoneVerificationError =
+                'Could not verify this phone number. Please try again.';
+            debugPrint(
+              'Automatic phone verification error: $e',
+            );
+          }
+
+          notifyListeners();
+        },
+
+        verificationFailed:
+            (FirebaseAuthException e) {
+          _phoneVerificationInProgress = false;
+
+          switch (e.code) {
+            case 'invalid-phone-number':
+              _phoneVerificationError =
+                  'The phone number is invalid.';
+              break;
+            case 'too-many-requests':
+              _phoneVerificationError =
+                  'Too many verification attempts. Please try again later.';
+              break;
+            case 'quota-exceeded':
+              _phoneVerificationError =
+                  'SMS verification quota exceeded. Please try again later.';
+              break;
+            default:
+              _phoneVerificationError =
+                  e.message ??
+                  'Could not send the verification code.';
+          }
+
+          debugPrint(
+            'Phone verification failed: ${e.code} ${e.message}',
+          );
+
+          notifyListeners();
+        },
+
+        codeSent: (
+          String verificationId,
+          int? resendToken,
+        ) {
+          _phoneVerificationId = verificationId;
+          _phoneResendToken = resendToken;
+          _phoneVerificationInProgress = false;
+          _phoneVerificationError = null;
+
+          debugPrint(
+            'OTP sent to $formattedPhone',
+          );
+
+          notifyListeners();
+        },
+
+        codeAutoRetrievalTimeout:
+            (String verificationId) {
+          _phoneVerificationId = verificationId;
+          _phoneVerificationInProgress = false;
+          notifyListeners();
+        },
+      );
+
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _phoneVerificationInProgress = false;
+      _phoneVerificationError =
+          e.message ??
+          'Could not start phone verification.';
+      debugPrint(
+        'Phone OTP error: ${e.code} ${e.message}',
+      );
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _phoneVerificationInProgress = false;
+      _phoneVerificationError =
+          'Could not start phone verification. Please try again.';
+      debugPrint(
+        'Phone OTP error: $e',
+      );
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> verifyPhoneOtp(String otp) async {
+    final firebaseUser = _auth.currentUser;
+    final verificationId = _phoneVerificationId;
+    final pendingPhone = _pendingVerifiedPhone;
+
+    if (firebaseUser == null) {
+      _phoneVerificationError =
+          'Your sign-in session expired. Please sign in again.';
+      notifyListeners();
+      return false;
+    }
+
+    if (verificationId == null || verificationId.isEmpty) {
+      _phoneVerificationError =
+          'Please request a new OTP first.';
+      notifyListeners();
+      return false;
+    }
+
+    final code = otp.trim();
+
+    if (!RegExp(r'^[0-9]{6}$').hasMatch(code)) {
+      _phoneVerificationError =
+          'Enter the 6-digit OTP.';
+      notifyListeners();
+      return false;
+    }
+
+    _phoneVerificationInProgress = true;
+    _phoneVerificationError = null;
+    notifyListeners();
+
+    try {
+      final credential =
+          PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: code,
+      );
+
+      await firebaseUser.linkWithCredential(
+        credential,
+      );
+
+      _phoneVerified = true;
+      _pendingVerifiedPhone = pendingPhone;
+      _phoneVerificationInProgress = false;
+      _phoneVerificationError = null;
+
+      debugPrint(
+        'Phone OTP verified successfully.',
+      );
+
+      notifyListeners();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _phoneVerificationInProgress = false;
+
+      switch (e.code) {
+        case 'invalid-verification-code':
+          _phoneVerificationError =
+              'Incorrect OTP. Please check the code and try again.';
+          break;
+        case 'session-expired':
+          _phoneVerificationError =
+              'This OTP has expired. Please request a new one.';
+          break;
+        case 'credential-already-in-use':
+          _phoneVerificationError =
+              'This phone number is already linked to another account.';
+          break;
+        case 'provider-already-linked':
+          _phoneVerified = true;
+          _phoneVerificationError = null;
+          break;
+        default:
+          _phoneVerificationError =
+              e.message ??
+              'Could not verify the OTP.';
+      }
+
+      debugPrint(
+        'Phone OTP verification failed: ${e.code}',
+      );
+
+      notifyListeners();
+      return _phoneVerified;
+    } catch (e) {
+      _phoneVerificationInProgress = false;
+      _phoneVerificationError =
+          'Could not verify the OTP. Please try again.';
+      debugPrint(
+        'Phone OTP verification error: $e',
+      );
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void clearPhoneVerificationError() {
+    _phoneVerificationError = null;
+    notifyListeners();
+  }
+
+  // ===========================================================================
   // COMPLETE PROFILE
   // ===========================================================================
 
@@ -742,12 +1025,30 @@ class RequestProvider extends ChangeNotifier {
     }
 
     final cleanUsername = username.trim().toLowerCase();
-    final cleanPhone = phone.trim();
+    final cleanPhone =
+        phone.replaceAll(RegExp(r'[\s-]'), '');
 
     if (cleanUsername.length < 3 ||
         !RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(cleanUsername) ||
         !RegExp(r'^[0-9]{10}$').hasMatch(cleanPhone)) {
       debugPrint('Invalid profile completion data.');
+      return false;
+    }
+
+    // A phone number must be proven to belong to the current account before
+    // it can be stored as the user's verified phone number.
+    if (!_phoneVerified ||
+        _pendingVerifiedPhone != cleanPhone) {
+      debugPrint(
+        'Profile completion rejected: '
+        'phoneVerified=$_phoneVerified, '
+        'pending=$_pendingVerifiedPhone, '
+        'entered=$cleanPhone',
+      );
+
+      _phoneVerificationError =
+          'Please verify your phone number with the OTP first.';
+      notifyListeners();
       return false;
     }
 
@@ -791,6 +1092,8 @@ class RequestProvider extends ChangeNotifier {
       _currentUser = updatedUser;
       _needsProfileCompletion = false;
       _clearPendingGoogleProfile();
+      _resetPhoneVerificationState();
+      await _startRequestListener();
 
       debugPrint('Profile completed and saved: $cleanUsername');
       return true;
@@ -967,6 +1270,7 @@ class RequestProvider extends ChangeNotifier {
       _currentUser = newUser;
 
       _needsProfileCompletion = false;
+      await _startRequestListener();
 
       debugPrint(
         'Signup successful: '
@@ -997,11 +1301,14 @@ class RequestProvider extends ChangeNotifier {
   // ===========================================================================
 
   Future<void> logout() async {
+    await _stopRequestListener();
+
     // Clear local routing state immediately so the app can return to LoginScreen
     // even if a provider's sign-out API is temporarily unavailable.
     _currentUser = null;
     _needsProfileCompletion = false;
     _clearPendingGoogleProfile();
+    _resetPhoneVerificationState();
     notifyListeners();
 
     try {
@@ -1026,6 +1333,12 @@ class RequestProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  @override
+  void dispose() {
+    _requestsSubscription?.cancel();
+    super.dispose();
+  }
+
   // ===========================================================================
   // GOOGLE PROFILE HELPERS
   // ===========================================================================
@@ -1034,6 +1347,66 @@ class RequestProvider extends ChangeNotifier {
     _pendingGoogleUser = null;
     _pendingGoogleEmail = null;
     _pendingGoogleName = null;
+  }
+
+  // ===========================================================================
+  // FIRESTORE REQUEST LISTENER
+  // ===========================================================================
+
+  Future<void> _startRequestListener() async {
+    await _requestsSubscription?.cancel();
+    _requestsSubscription = null;
+    _requests.clear();
+
+    final user = _currentUser;
+    if (user == null) {
+      notifyListeners();
+      return;
+    }
+
+    Query<Map<String, dynamic>> query =
+        _firestore.collection('requests');
+
+    // Staff can see every assistance request.
+    // Passengers only receive their own requests.
+    if (user.role == UserRole.passenger) {
+      query = query.where('passengerId', isEqualTo: user.id);
+    }
+
+    _requestsSubscription = query.snapshots().listen(
+      (snapshot) {
+        final loaded = snapshot.docs.map((doc) {
+          return AssistanceRequest.fromMap(
+            doc.data(),
+            doc.id,
+          );
+        }).toList();
+
+        // Sort newest first locally. This avoids requiring a Firestore
+        // composite index when the passenger filter is active.
+        loaded.sort(
+          (a, b) => b.timestamp.compareTo(a.timestamp),
+        );
+
+        _requests
+          ..clear()
+          ..addAll(loaded);
+
+        debugPrint(
+          'Firestore requests updated: ${_requests.length}',
+        );
+        notifyListeners();
+      },
+      onError: (Object error, StackTrace stackTrace) {
+        debugPrint('Firestore request listener error: $error');
+      },
+    );
+  }
+
+  Future<void> _stopRequestListener() async {
+    await _requestsSubscription?.cancel();
+    _requestsSubscription = null;
+    _requests.clear();
   }
 
   // ===========================================================================
@@ -1047,7 +1420,9 @@ class RequestProvider extends ChangeNotifier {
     required List<String> assistanceType,
     String? notes,
   }) async {
-    if (_currentUser == null) {
+    final user = _currentUser;
+    if (user == null || user.role != UserRole.passenger) {
+      debugPrint('Cannot submit request: no passenger is logged in.');
       return false;
     }
 
@@ -1055,39 +1430,34 @@ class RequestProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await Future.delayed(
-        const Duration(
-          milliseconds: 800,
-        ),
-      );
+      final docRef = _firestore.collection('requests').doc();
 
-      final newRequest =
-          AssistanceRequest(
-        id:
-            'req_${DateTime.now().millisecondsSinceEpoch}',
-        pnr: pnr,
-        trainNo: trainNo,
-        coach: coach,
-        passengerId:
-            _currentUser!.id,
-        passengerName:
-            _currentUser!.name,
-        passengerPhone:
-            _currentUser!.phone,
+      final request = AssistanceRequest(
+        id: docRef.id,
+        pnr: pnr.trim(),
+        trainNo: trainNo.trim(),
+        coach: coach.trim().toUpperCase(),
+        passengerId: user.id,
+        passengerName: user.name,
+        passengerPhone: user.phone,
         status: 'Requested',
-        assistanceType:
-            assistanceType,
-        timestamp:
-            DateTime.now(),
-        notes: notes,
+        assistanceType: List<String>.from(assistanceType),
+        timestamp: DateTime.now(),
+        notes: notes?.trim(),
       );
 
-      _mockRequests.insert(
-        0,
-        newRequest,
-      );
+      await docRef.set(request.toMap());
 
+      debugPrint('Assistance request created: ${docRef.id}');
       return true;
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'Firestore submit request error: ${e.code} ${e.message}',
+      );
+      return false;
+    } catch (e) {
+      debugPrint('Submit request error: $e');
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -1104,41 +1474,48 @@ class RequestProvider extends ChangeNotifier {
     String? staffId,
     String? staffName,
   }) async {
+    final user = _currentUser;
+    if (user == null || user.role != UserRole.staff) {
+      debugPrint('Cannot update request: no staff member is logged in.');
+      return false;
+    }
+
     _isLoading = true;
     notifyListeners();
 
     try {
-      await Future.delayed(
-        const Duration(
-          milliseconds: 500,
-        ),
-      );
+      final requestRef =
+          _firestore.collection('requests').doc(requestId);
 
-      final index =
-          _mockRequests.indexWhere(
-        (r) => r.id == requestId,
-      );
+      final data = <String, dynamic>{
+        'status': newStatus,
+      };
 
-      if (index == -1) {
-        return false;
+      if (staffId != null) {
+        data['staffId'] = staffId;
+      }
+      if (staffName != null) {
+        data['staffName'] = staffName;
       }
 
-      final oldReq =
-          _mockRequests[index];
+      await requestRef.update(data);
 
-      _mockRequests[index] =
-          oldReq.copyWith(
-        status: newStatus,
-        staffId:
-            staffId ?? oldReq.staffId,
-        staffName:
-            staffName ?? oldReq.staffName,
+      debugPrint(
+        'Request $requestId updated to $newStatus',
       );
-
       return true;
+    } on FirebaseException catch (e) {
+      debugPrint(
+        'Firestore update request error: ${e.code} ${e.message}',
+      );
+      return false;
+    } catch (e) {
+      debugPrint('Update request error: $e');
+      return false;
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
+
 }

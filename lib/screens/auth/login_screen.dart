@@ -82,19 +82,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  void _useDemoLogin(bool isStaffUser) {
-    setState(() {
-      _isStaff = isStaffUser;
-
-      if (isStaffUser) {
-        _emailController.text = 'sunil@railnet.gov.in';
-        _passwordController.text = 'password123';
-      } else {
-        _emailController.text = 'ramesh@gmail.com';
-        _passwordController.text = 'password123';
-      }
-    });
-  }
 
   Future<void> _handleGoogleSignIn() async {
     FocusScope.of(context).unfocus();
@@ -104,7 +91,9 @@ class _LoginScreenState extends State<LoginScreen> {
       listen: false,
     );
 
-    final success = await provider.signInWithGoogle();
+    final success = await provider.signInWithGoogle(
+      isStaff: _isStaff,
+    );
 
     if (!mounted) return;
 
@@ -320,7 +309,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Email or Username',
                             hintText: 'Enter your email or username',
-                            prefixIcon: const Icon(Icons.person_outline),
+                            prefixIcon:
+                                const Icon(Icons.person_outline),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -379,7 +369,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               onPressed: () {
                                 setState(() {
-                                  _obscurePassword = !_obscurePassword;
+                                  _obscurePassword =
+                                      !_obscurePassword;
                                 });
                               },
                             ),
@@ -441,15 +432,28 @@ class _LoginScreenState extends State<LoginScreen> {
                           child: OutlinedButton.icon(
                             onPressed:
                                 isLoading ? null : _handleGoogleSignIn,
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.account_circle,
                               size: 26,
+                              color: primaryColor,
                             ),
-                            label: const Text(
+                            label: Text(
                               'Continue with Google',
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
+                                color: primaryColor,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: primaryColor,
+                              side: BorderSide(
+                                color: primaryColor,
+                                width: 1.5,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(12),
                               ),
                             ),
                           ),
@@ -480,72 +484,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
                         const SizedBox(height: 8),
 
-                        // Demo Section
-                        const Text(
-                          'Demo Quick Actions (Beginner Testing):',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-
-                        const SizedBox(height: 8),
-
-                        Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: isLoading
-                                    ? null
-                                    : () {
-                                        _useDemoLogin(false);
-                                      },
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                    color: Colors.orange.shade800,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Passenger',
-                                  style: TextStyle(
-                                    color: Colors.orange.shade800,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: isLoading
-                                    ? null
-                                    : () {
-                                        _useDemoLogin(true);
-                                      },
-                                style: OutlinedButton.styleFrom(
-                                  side: BorderSide(
-                                    color: Colors.indigo.shade800,
-                                  ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 10,
-                                  ),
-                                ),
-                                child: Text(
-                                  'Staff / Guard',
-                                  style: TextStyle(
-                                    color: Colors.indigo.shade800,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
                       ],
                     ),
                   ),

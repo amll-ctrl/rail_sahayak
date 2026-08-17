@@ -25,6 +25,107 @@ class _SignupScreenState extends State<SignupScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  Future<bool> _verifySignupPhone(RequestProvider provider) async {
+    final phone = _phoneController.text.trim();
+
+    final sent = await provider.sendPhoneOtp(phone);
+    if (!mounted) return false;
+
+    if (!sent) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.phoneVerificationError ??
+                'Could not send the verification code.',
+          ),
+          backgroundColor: Colors.red.shade700,
+        ),
+      );
+      return false;
+    }
+
+    final otpController = TextEditingController();
+    bool verifying = false;
+
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Verify Phone Number'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Enter the 6-digit OTP for +91 $phone.'),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: otpController,
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'OTP',
+                      hintText: '123456',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: const OutlineInputBorder(),
+                      errorText: provider.phoneVerificationError,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: verifying
+                      ? null
+                      : () => Navigator.of(dialogContext).pop(false),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: verifying
+                      ? null
+                      : () async {
+                          final otp = otpController.text.trim();
+                          if (!RegExp(r'^\d{6}$').hasMatch(otp)) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Enter the 6-digit OTP.'),
+                              ),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => verifying = true);
+                          final ok = await provider.verifyPhoneOtp(otp);
+
+                          if (!mounted) return;
+
+                          if (ok) {
+                            Navigator.of(dialogContext).pop(true);
+                          } else {
+                            setDialogState(() => verifying = false);
+                          }
+                        },
+                  child: verifying
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Verify'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    otpController.dispose();
+    return result == true && provider.phoneVerified;
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -46,6 +147,8 @@ class _SignupScreenState extends State<SignupScreen> {
       listen: false,
     );
 
+    FocusScope.of(context).unfocus();
+
     final success = await provider.signup(
       name: _nameController.text.trim(),
       username: _usernameController.text.trim(),
@@ -57,24 +160,59 @@ class _SignupScreenState extends State<SignupScreen> {
 
     if (!mounted) return;
 
-    if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Account created successfully!'),
-          backgroundColor: Colors.green.shade700,
-        ),
-      );
-
-      Navigator.of(context).pop();
-    } else {
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
             'Could not create account. The email or username may already be registered.',
           ),
+          backgroundColor: Colors.red,
         ),
       );
+      return;
     }
+
+    final phoneVerified = await _verifySignupPhone(provider);
+
+    if (!mounted) return;
+
+    if (!phoneVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Phone verification is required to finish signup.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    final profileCompleted = await provider.completeProfile(
+      username: _usernameController.text.trim(),
+      phone: _phoneController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (!profileCompleted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Phone verified, but the profile could not be finalized.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Account created and phone verified!'),
+        backgroundColor: Colors.green.shade700,
+      ),
+    );
+
+    Navigator.of(context).pop();
   }
 
   @override
@@ -252,7 +390,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         keyboardType: TextInputType.phone,
                         textInputAction: TextInputAction.next,
                         decoration: const InputDecoration(
-                          labelText: 'Phone Number',
+                          labelText: 'Phone Number (OTP verified)',
                           prefixIcon: Icon(Icons.phone),
                           border: OutlineInputBorder(),
                         ),

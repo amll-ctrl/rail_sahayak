@@ -41,7 +41,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
         ],
       ),
       body: user == null
-          ? const Center(child: Text('Authentication error. Please log in again.'))
+          ? const Center(child: CircularProgressIndicator())
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [

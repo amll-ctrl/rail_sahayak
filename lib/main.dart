@@ -1,5 +1,8 @@
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
+
+import 'services/notification_service.dart';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 
@@ -19,6 +22,7 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  await NotificationService.instance.initialize();
 
   await GoogleSignIn.instance.initialize();
 
@@ -148,6 +152,11 @@ class _ProfileCompletionScreenState
       TextEditingController();
 
   bool _isSaving = false;
+  bool _otpSent = false;
+  bool _isVerifyingOtp = false;
+
+  final _otpController =
+      TextEditingController();
 
   @override
   void initState() {
@@ -169,7 +178,105 @@ class _ProfileCompletionScreenState
   void dispose() {
     _usernameController.dispose();
     _phoneController.dispose();
+    _otpController.dispose();
     super.dispose();
+  }
+
+  Future<void> _sendOtp() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    final provider =
+        context.read<RequestProvider>();
+
+    final success = await provider.sendPhoneOtp(
+      _phoneController.text,
+      resend: _otpSent,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      setState(() {
+        _otpSent = true;
+        _otpController.clear();
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'OTP sent to your phone number.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else if (provider.phoneVerificationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.phoneVerificationError!,
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _verifyOtp() async {
+    final otp = _otpController.text.trim();
+
+    if (!RegExp(r'^[0-9]{6}$').hasMatch(otp)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Enter the 6-digit OTP.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    setState(() {
+      _isVerifyingOtp = true;
+    });
+
+    final provider =
+        context.read<RequestProvider>();
+
+    final success =
+        await provider.verifyPhoneOtp(otp);
+
+    if (!mounted) return;
+
+    setState(() {
+      _isVerifyingOtp = false;
+    });
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Phone number verified successfully!',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else if (provider.phoneVerificationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            provider.phoneVerificationError!,
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _completeProfile() async {
@@ -183,6 +290,18 @@ class _ProfileCompletionScreenState
     final user = provider.currentUser;
 
     if (user == null) {
+      return;
+    }
+
+    if (!provider.phoneVerified) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please verify your phone number with the OTP first.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
 
@@ -206,95 +325,34 @@ class _ProfileCompletionScreenState
                 '',
               );
 
-      // -------------------------------------------------------
-      // Check username availability
-      // -------------------------------------------------------
-
-      final usernameQuery =
-          await FirebaseFirestore.instance
-              .collection('users')
-              .where(
-                'username',
-                isEqualTo: username,
-              )
-              .limit(1)
-              .get();
-
-      if (usernameQuery.docs.isNotEmpty &&
-          usernameQuery.docs.first.id != user.id) {
-        if (!mounted) return;
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'That username is already taken.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-
-        setState(() {
-          _isSaving = false;
-        });
-
-        return;
-      }
-
-      // -------------------------------------------------------
-      // Save profile to Firestore
-      // -------------------------------------------------------
-
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.id)
-          .set(
-        {
-          'name': user.name,
-          'username': username,
-          'email': user.email,
-          'phone': phone,
-          'role': user.role == UserRole.staff
-              ? 'staff'
-              : 'passenger',
-          'disabilityType':
-              user.disabilityType,
-          'preferredAssistance':
-              user.preferredAssistance,
-        },
-        SetOptions(
-          merge: true,
-        ),
-      );
-
-      // -------------------------------------------------------
-      // Update RequestProvider
-      // -------------------------------------------------------
-
-      await provider.completeProfile(
+      final success =
+          await provider.completeProfile(
         username: username,
         phone: phone,
       );
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Profile completed successfully!',
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Profile completed successfully!',
+            ),
+            backgroundColor: Colors.green,
           ),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // No manual navigation needed here.
-      //
-      // completeProfile() changes:
-      //
-      // needsProfileCompletion = false
-      //
-      // Provider notifies MyApp.
-      //
-      // MyApp rebuilds and automatically shows PassengerHome.
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              provider.phoneVerificationError ??
+                  'Could not save your profile. Please try again.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } catch (e) {
       debugPrint(
         'Profile completion error: $e',
@@ -327,7 +385,9 @@ class _ProfileCompletionScreenState
     final user = provider.currentUser;
 
     final primaryColor =
-        Colors.orange.shade800;
+        user?.role == UserRole.staff
+            ? Colors.indigo.shade800
+            : Colors.orange.shade800;
 
     return Scaffold(
       appBar: AppBar(
@@ -431,9 +491,14 @@ class _ProfileCompletionScreenState
 
                           decoration:
                               BoxDecoration(
-                            color:
-                                Colors.grey.shade100,
-
+                            color: primaryColor.withValues(
+                              alpha: 0.06,
+                            ),
+                            border: Border.all(
+                              color: primaryColor.withValues(
+                                alpha: 0.25,
+                              ),
+                            ),
                             borderRadius:
                                 BorderRadius.circular(
                               12,
@@ -446,11 +511,12 @@ class _ProfileCompletionScreenState
                                     .start,
 
                             children: [
-                              const Text(
+                              Text(
                                 'Google Account',
                                 style: TextStyle(
                                   fontWeight:
                                       FontWeight.bold,
+                                  color: primaryColor,
                                 ),
                               ),
 
@@ -507,8 +573,17 @@ class _ProfileCompletionScreenState
                               'Choose a username',
 
                           prefixIcon:
-                              const Icon(
+
+
+                              Icon(
+
+
                             Icons.person_outline,
+
+
+                            color: primaryColor,
+
+
                           ),
 
                           border:
@@ -545,6 +620,7 @@ class _ProfileCompletionScreenState
                       const SizedBox(height: 16),
 
                       // -------------------------------------------------------
+                      // -------------------------------------------------------
                       // Phone
                       // -------------------------------------------------------
 
@@ -552,19 +628,18 @@ class _ProfileCompletionScreenState
                         controller:
                             _phoneController,
 
-                        enabled: !_isSaving,
+                        enabled:
+                            !_isSaving &&
+                            !_isVerifyingOtp &&
+                            !context
+                                .watch<RequestProvider>()
+                                .phoneVerified,
 
                         keyboardType:
                             TextInputType.phone,
 
                         textInputAction:
                             TextInputAction.done,
-
-                        onFieldSubmitted: (_) {
-                          if (!_isSaving) {
-                            _completeProfile();
-                          }
-                        },
 
                         decoration:
                             InputDecoration(
@@ -575,8 +650,9 @@ class _ProfileCompletionScreenState
                               'Enter your 10-digit phone number',
 
                           prefixIcon:
-                              const Icon(
+                              Icon(
                             Icons.phone_outlined,
+                            color: primaryColor,
                           ),
 
                           border:
@@ -612,6 +688,236 @@ class _ProfileCompletionScreenState
                         },
                       ),
 
+                      const SizedBox(height: 12),
+
+                      // -------------------------------------------------------
+                      // Send / Resend OTP
+                      // -------------------------------------------------------
+
+                      Builder(
+                        builder: (context) {
+                          final provider =
+                              context.watch<RequestProvider>();
+
+                          if (provider.phoneVerified) {
+                            return Container(
+                              padding:
+                                  const EdgeInsets.all(14),
+                              decoration:
+                                  BoxDecoration(
+                                color:
+                                    Colors.green.withValues(
+                                  alpha: 0.08,
+                                ),
+                                border: Border.all(
+                                  color:
+                                      Colors.green.withValues(
+                                    alpha: 0.35,
+                                  ),
+                                ),
+                                borderRadius:
+                                    BorderRadius.circular(
+                                  12,
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.verified,
+                                    color: Colors.green,
+                                  ),
+                                  const SizedBox(
+                                    width: 10,
+                                  ),
+                                  Expanded(
+                                    child: Text(
+                                      'Phone number verified',
+                                      style:
+                                          const TextStyle(
+                                        fontWeight:
+                                            FontWeight.bold,
+                                        color:
+                                            Colors.green,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }
+
+                          return SizedBox(
+                            height: 48,
+                            child: OutlinedButton.icon(
+                              onPressed:
+                                  provider.phoneVerificationInProgress ||
+                                          _isSaving ||
+                                          _isVerifyingOtp
+                                      ? null
+                                      : _sendOtp,
+                              icon:
+                                  provider.phoneVerificationInProgress
+                                      ? const SizedBox(
+                                          height: 18,
+                                          width: 18,
+                                          child:
+                                              CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.sms_outlined,
+                                          color: primaryColor,
+                                        ),
+                              label: Text(
+                                _otpSent
+                                    ? 'Resend OTP'
+                                    : 'Send OTP',
+                                style: TextStyle(
+                                  color: primaryColor,
+                                  fontWeight:
+                                      FontWeight.bold,
+                                ),
+                              ),
+                              style:
+                                  OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: primaryColor,
+                                ),
+                                shape:
+                                    RoundedRectangleBorder(
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    12,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+
+                      // -------------------------------------------------------
+                      // OTP
+                      // -------------------------------------------------------
+
+                      if (_otpSent)
+                        Padding(
+                          padding:
+                              const EdgeInsets.only(
+                            top: 16,
+                          ),
+                          child: Builder(
+                            builder: (context) {
+                              final provider =
+                                  context.watch<
+                                      RequestProvider>();
+
+                              return Column(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.stretch,
+                                children: [
+                                  TextFormField(
+                                    controller:
+                                        _otpController,
+                                    enabled:
+                                        !_isVerifyingOtp &&
+                                        !_isSaving &&
+                                        !provider.phoneVerified,
+                                    keyboardType:
+                                        TextInputType.number,
+                                    textInputAction:
+                                        TextInputAction.done,
+                                    maxLength: 6,
+                                    textAlign:
+                                        TextAlign.center,
+                                    decoration:
+                                        InputDecoration(
+                                      labelText:
+                                          'Enter OTP',
+                                      hintText:
+                                          '6-digit code',
+                                      counterText:
+                                          '',
+                                      prefixIcon:
+                                          Icon(
+                                        Icons
+                                            .lock_outline,
+                                        color:
+                                            primaryColor,
+                                      ),
+                                      border:
+                                          OutlineInputBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(
+                                          12,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  const SizedBox(
+                                    height: 12,
+                                  ),
+
+                                  SizedBox(
+                                    height: 48,
+                                    child:
+                                        ElevatedButton(
+                                      onPressed:
+                                          provider.phoneVerified ||
+                                                  _isVerifyingOtp ||
+                                                  _isSaving
+                                              ? null
+                                              : _verifyOtp,
+                                      style:
+                                          ElevatedButton
+                                              .styleFrom(
+                                        backgroundColor:
+                                            primaryColor,
+                                        foregroundColor:
+                                            Colors.white,
+                                        shape:
+                                            RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                      ),
+                                      child:
+                                          _isVerifyingOtp
+                                              ? const SizedBox(
+                                                  height: 20,
+                                                  width: 20,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth:
+                                                        2.5,
+                                                    valueColor:
+                                                        AlwaysStoppedAnimation<
+                                                            Color>(
+                                                      Colors
+                                                          .white,
+                                                    ),
+                                                  ),
+                                                )
+                                              : const Text(
+                                                  'Verify Phone',
+                                                  style:
+                                                      TextStyle(
+                                                    fontWeight:
+                                                        FontWeight.bold,
+                                                  ),
+                                                ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                        ),
+
                       const SizedBox(height: 28),
 
                       // -------------------------------------------------------
@@ -623,7 +929,10 @@ class _ProfileCompletionScreenState
 
                         child: ElevatedButton(
                           onPressed:
-                              _isSaving
+                              _isSaving ||
+                                      !context
+                                          .watch<RequestProvider>()
+                                          .phoneVerified
                                   ? null
                                   : _completeProfile,
 

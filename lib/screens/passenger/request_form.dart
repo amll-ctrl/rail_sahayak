@@ -61,14 +61,25 @@ class _RequestFormState extends State<RequestForm> {
         notes: _notesController.text.trim(),
       );
 
-      if (success && mounted) {
+      if (!mounted) return;
+
+      if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Assistance requested successfully!'),
+            content: const Text('Assistance request sent to railway staff!'),
             backgroundColor: Colors.green.shade700,
           ),
         );
         Navigator.pop(context);
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not send the request. Please check your connection and try again.',
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
