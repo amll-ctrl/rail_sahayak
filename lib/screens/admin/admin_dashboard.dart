@@ -15,6 +15,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   Future<List<UserProfile>>? _staffFuture;
+  bool _loggingOut = false;
 
   @override
   void initState() {
@@ -56,7 +57,24 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Future<void> _logout() async {
-    await context.read<RequestProvider>().logout();
+    if (_loggingOut) return;
+    setState(() => _loggingOut = true);
+
+    try {
+      // Clear the app state first, then explicitly terminate the Firebase
+      // session. This avoids waiting for background listeners before the app
+      // returns to its unauthenticated route.
+      await context.read<RequestProvider>().logout();
+      await FirebaseAuth.instance.signOut();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not sign out: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loggingOut = false);
+    }
   }
 
   Widget _staffTile(UserProfile staff, {bool pending = false}) {
@@ -115,8 +133,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
         backgroundColor: Colors.indigo.shade800,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(tooltip: 'Refresh', onPressed: provider.isAdminDataLoading ? null : _refresh, icon: const Icon(Icons.refresh)),
-          IconButton(tooltip: 'Sign out', onPressed: _logout, icon: const Icon(Icons.logout)),
+          IconButton(tooltip: 'Refresh', onPressed: provider.isAdminDataLoading || _loggingOut ? null : _refresh, icon: const Icon(Icons.refresh)),
+          IconButton(
+            tooltip: 'Sign out',
+            onPressed: _loggingOut ? null : _logout,
+            icon: _loggingOut
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Icon(Icons.logout),
+          ),
         ],
       ),
       body: RefreshIndicator(
