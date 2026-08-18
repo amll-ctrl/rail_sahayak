@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -14,8 +15,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   final _formKey = GlobalKey<FormState>();
   final _usernameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _otpController = TextEditingController();
-  bool _otpSent = false;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -30,48 +30,64 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   void dispose() {
     _usernameController.dispose();
     _phoneController.dispose();
-    _otpController.dispose();
     super.dispose();
   }
 
-  Future<void> _sendOtp() async {
-    final phone = _phoneController.text.trim();
-    if (!RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid 10-digit phone number.')));
-      return;
-    }
-    final ok = await context.read<RequestProvider>().sendPhoneOtp(phone);
-    if (!mounted) return;
-    if (ok) {
-      setState(() => _otpSent = true);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OTP sent to your phone.')));
-    } else {
-      final error = context.read<RequestProvider>().phoneVerificationError ?? 'Could not send OTP. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-    }
-  }
-
-  Future<void> _verifyOtp() async {
-    final ok = await context.read<RequestProvider>().verifyPhoneOtp(_otpController.text.trim());
-    if (!mounted) return;
-    if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone number verified.')));
-    } else {
-      final error = context.read<RequestProvider>().phoneVerificationError ?? 'Incorrect OTP. Please try again.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-    }
-  }
-
   Future<void> _complete() async {
-    if (!_formKey.currentState!.validate()) return;
-    final ok = await context.read<RequestProvider>().completeProfile(
-          username: _usernameController.text.trim(),
-          phone: _phoneController.text.trim(),
+    if (!_formKey.currentState!.validate() || _saving) return;
+
+    final provider = context.read<RequestProvider>();
+    final user = provider.currentUser;
+    if (user == null) return;
+
+    final username = _usernameController.text.trim().toLowerCase();
+    final phone = _phoneController.text.replaceAll(RegExp(r'[\s-]'), '');
+
+    setState(() => _saving = true);
+    try {
+      final firestore = FirebaseFirestore.instance;
+      final existing = await firestore
+          .collection('users')
+          .where('username', isEqualTo: username)
+          .limit(1)
+          .get();
+
+      if (existing.docs.isNotEmpty && existing.docs.first.id != user.id) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('That username is already taken.')),
+          );
+        }
+        return;
+      }
+
+      await firestore.collection('users').doc(user.id).set({
+        'username': username,
+        'phone': phone,
+      }, SetOptions(merge: true));
+
+      // OTP verification is disabled for now. Refreshing the session reloads
+      // the completed profile from Firestore without requiring phone auth.
+      await provider.logout();
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Profile completed! Please sign in once more to continue.'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not save your profile. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
         );
-    if (!mounted) return;
-    if (!ok) {
-      final error = context.read<RequestProvider>().phoneVerificationError ?? 'Complete phone verification before continuing.';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -82,7 +98,9 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     final primary = Colors.orange.shade800;
     final displayName = (user?.name.trim().isNotEmpty ?? false)
         ? user!.name.trim()
-        : (provider.pendingGoogleName.trim().isNotEmpty ? provider.pendingGoogleName.trim() : 'Google Account');
+        : (provider.pendingGoogleName.trim().isNotEmpty
+            ? provider.pendingGoogleName.trim()
+            : 'Google Account');
     final displayEmail = (user?.email.trim().isNotEmpty ?? false)
         ? user!.email.trim()
         : provider.pendingGoogleEmail.trim();
@@ -97,7 +115,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
           IconButton(
             tooltip: 'Log out',
             icon: const Icon(Icons.logout),
-            onPressed: provider.isLoading ? null : () => provider.logout(),
+            onPressed: provider.isLoading || _saving ? null : () => provider.logout(),
           ),
         ],
       ),
@@ -119,11 +137,12 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                       const Text('Almost there!', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
                       Text(displayName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
-                      if (displayEmail.isNotEmpty) Text(displayEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+                      if (displayEmail.isNotEmpty)
+                        Text(displayEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
                       const SizedBox(height: 24),
                       TextFormField(
                         controller: _usernameController,
-                        enabled: !provider.isLoading,
+                        enabled: !_saving,
                         decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
                         validator: (value) {
                           final username = value?.trim() ?? '';
@@ -135,37 +154,25 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                       const SizedBox(height: 16),
                       TextFormField(
                         controller: _phoneController,
-                        enabled: !provider.isLoading && !provider.phoneVerified,
+                        enabled: !_saving,
                         keyboardType: TextInputType.phone,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           labelText: 'Phone Number',
-                          border: const OutlineInputBorder(),
-                          suffixIcon: provider.phoneVerified
-                              ? const Icon(Icons.verified, color: Colors.green)
-                              : TextButton(onPressed: provider.phoneVerificationInProgress ? null : _sendOtp, child: const Text('SEND OTP')),
+                          hintText: '10-digit Indian mobile number',
+                          border: OutlineInputBorder(),
+                          prefixIcon: Icon(Icons.phone_outlined),
                         ),
                         validator: (value) => RegExp(r'^[0-9]{10}$').hasMatch(value?.trim() ?? '') ? null : 'Enter a valid 10-digit phone number.',
                       ),
-                      if (_otpSent && !provider.phoneVerified) ...[
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _otpController,
-                          keyboardType: TextInputType.number,
-                          maxLength: 6,
-                          decoration: InputDecoration(
-                            labelText: '6-digit OTP',
-                            border: const OutlineInputBorder(),
-                            suffixIcon: TextButton(onPressed: provider.phoneVerificationInProgress ? null : _verifyOtp, child: const Text('VERIFY')),
-                          ),
-                        ),
-                      ],
                       const SizedBox(height: 24),
                       SizedBox(
                         height: 52,
                         child: ElevatedButton(
-                          onPressed: provider.isLoading ? null : _complete,
+                          onPressed: _saving ? null : _complete,
                           style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white),
-                          child: provider.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Complete Profile'),
+                          child: _saving
+                              ? const CircularProgressIndicator(color: Colors.white)
+                              : const Text('Complete Profile'),
                         ),
                       ),
                     ],
