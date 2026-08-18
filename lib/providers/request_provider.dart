@@ -15,6 +15,7 @@ class RequestProvider extends ChangeNotifier {
   UserProfile? _currentUser;
   bool _isLoading = false;
   bool _needsProfileCompletion = false;
+  bool _isSessionInitialized = false;
 
   String? _phoneVerificationId;
   int? _phoneResendToken;
@@ -39,6 +40,7 @@ class RequestProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get needsProfileCompletion => _needsProfileCompletion;
   bool get needsGoogleProfileCompletion => _needsProfileCompletion;
+  bool get isSessionInitialized => _isSessionInitialized;
   bool get phoneVerificationInProgress => _phoneVerificationInProgress;
   bool get phoneVerified => _phoneVerified;
   String? get phoneVerificationError => _phoneVerificationError;
@@ -60,18 +62,19 @@ class RequestProvider extends ChangeNotifier {
   // ---------------------------------------------------------------------------
 
   Future<void> _restoreSession() async {
-    final firebaseUser = _auth.currentUser;
-
-    if (firebaseUser == null) return;
-
     try {
+      final firebaseUser = _auth.currentUser;
+
+      if (firebaseUser == null) {
+        return;
+      }
+
       await firebaseUser.reload();
       final refreshedUser = _auth.currentUser;
 
       if (refreshedUser == null) {
         _currentUser = null;
         _needsProfileCompletion = false;
-        notifyListeners();
         return;
       }
 
@@ -83,8 +86,6 @@ class RequestProvider extends ChangeNotifier {
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
 
-        // Firestore remains the source for RailSahayak profile data, while
-        // Firebase Auth supplies a reliable fallback for Google name/email.
         final firestoreName =
             (data['name'] ?? '').toString().trim();
         final firestoreEmail =
@@ -92,16 +93,13 @@ class RequestProvider extends ChangeNotifier {
 
         final restoredName = firestoreName.isNotEmpty
             ? firestoreName
-            : ((refreshedUser.displayName?.trim().isNotEmpty ?? false)
+            : ((refreshedUser.displayName ?? '').trim().isNotEmpty
                 ? refreshedUser.displayName!.trim()
                 : 'Google User');
 
         final restoredEmail = firestoreEmail.isNotEmpty
             ? firestoreEmail
-            : (refreshedUser.email?.trim() ?? '');
-
-        final roleString =
-            (data['role'] ?? 'passenger').toString().toLowerCase();
+            : (refreshedUser.email ?? '').trim();
 
         _currentUser = UserProfile(
           id: refreshedUser.uid,
@@ -109,14 +107,15 @@ class RequestProvider extends ChangeNotifier {
           username: (data['username'] ?? '').toString(),
           email: restoredEmail,
           phone: (data['phone'] ?? '').toString(),
-          role: roleString == 'staff'
+          role: (data['role'] ?? 'passenger')
+                  .toString()
+                  .toLowerCase() ==
+              'staff'
               ? UserRole.staff
               : UserRole.passenger,
           disabilityType: data['disabilityType'],
           preferredAssistance: data['preferredAssistance'],
         );
-
-        _needsProfileCompletion = _isProfileIncomplete(_currentUser!);
 
         final isGoogleUser = refreshedUser.providerData.any(
           (provider) => provider.providerId == 'google.com',
@@ -124,22 +123,26 @@ class RequestProvider extends ChangeNotifier {
 
         if (isGoogleUser) {
           _pendingGoogleUser = refreshedUser;
-          _pendingGoogleEmail = restoredEmail;
           _pendingGoogleName = restoredName;
+          _pendingGoogleEmail = restoredEmail;
         }
 
-        if (_needsProfileCompletion) {
-          await _stopRequestListener();
-        } else {
+        _needsProfileCompletion =
+            _isProfileIncomplete(_currentUser!);
+
+        debugPrint(
+          'Session restored: ${_currentUser!.email}',
+        );
+        debugPrint(
+          'Profile incomplete: $_needsProfileCompletion',
+        );
+
+        if (!_needsProfileCompletion) {
           await _startRequestListener();
+        } else {
+          await _stopRequestListener();
         }
 
-        debugPrint('Session restored: ${_currentUser!.email}');
-        debugPrint('Restored name: "${_currentUser!.name}"');
-        debugPrint('Restored username: "${_currentUser!.username}"');
-        debugPrint('Profile incomplete: $_needsProfileCompletion');
-
-        notifyListeners();
         return;
       }
 
@@ -149,10 +152,11 @@ class RequestProvider extends ChangeNotifier {
 
       if (isGoogleUser) {
         final restoredName =
-            refreshedUser.displayName?.trim().isNotEmpty == true
+            (refreshedUser.displayName ?? '').trim().isNotEmpty
                 ? refreshedUser.displayName!.trim()
                 : 'Google User';
-        final restoredEmail = refreshedUser.email?.trim() ?? '';
+        final restoredEmail =
+            (refreshedUser.email ?? '').trim();
 
         _currentUser = UserProfile(
           id: refreshedUser.uid,
@@ -172,22 +176,31 @@ class RequestProvider extends ChangeNotifier {
         await _auth.signOut();
         _currentUser = null;
         _needsProfileCompletion = false;
+        _clearPendingGoogleProfile();
         await _stopRequestListener();
       }
-
-      notifyListeners();
     } catch (e) {
       debugPrint('Error restoring Firebase session: $e');
+      _currentUser = null;
+      _needsProfileCompletion = false;
+      await _stopRequestListener();
+    } finally {
+      _isSessionInitialized = true;
+      notifyListeners();
     }
   }
+
+  // ===========================================================================
+  // PROFILE COMPLETION CHECK
+  // ===========================================================================
 
   bool _isProfileIncomplete(UserProfile user) {
     return user.username.trim().isEmpty || user.phone.trim().isEmpty;
   }
 
-  // ---------------------------------------------------------------------------
-  // EMAIL / USERNAME LOGIN
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // LOGIN - EMAIL OR USERNAME
+  // ===========================================================================
 
   Future<bool> login(
     String identifier,
@@ -213,10 +226,13 @@ class RequestProvider extends ChangeNotifier {
 
         if (usernameQuery.docs.isEmpty) return false;
 
-        final storedEmail = usernameQuery.docs.first.data()['email'];
+        final userData = usernameQuery.docs.first.data();
+        final storedEmail = userData['email'];
+
         if (storedEmail == null || storedEmail.toString().trim().isEmpty) {
           return false;
         }
+
         email = storedEmail.toString().trim();
       }
 
@@ -249,6 +265,7 @@ class RequestProvider extends ChangeNotifier {
         await _auth.signOut();
         return false;
       }
+
       if (!isStaff && userRole != UserRole.passenger) {
         await _auth.signOut();
         return false;
@@ -260,7 +277,9 @@ class RequestProvider extends ChangeNotifier {
             firebaseUser.displayName ??
             'RailSahayak User',
         username: profileData['username'] ?? '',
-        email: profileData['email'] ?? firebaseUser.email ?? email,
+        email: profileData['email'] ??
+            firebaseUser.email ??
+            email,
         phone: profileData['phone'] ?? '',
         role: userRole,
         disabilityType: profileData['disabilityType'],
@@ -283,16 +302,17 @@ class RequestProvider extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
   // GOOGLE SIGN-IN
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
 
   Future<bool> signInWithGoogle({bool isStaff = false}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      final googleUser = await _googleSignIn.authenticate();
+      final GoogleSignInAccount googleUser =
+          await _googleSignIn.authenticate();
       final googleAuth = googleUser.authentication;
       final idToken = googleAuth.idToken;
 
@@ -311,18 +331,19 @@ class RequestProvider extends ChangeNotifier {
         final profileData = profileDoc.data()!;
         final roleString =
             (profileData['role'] ?? 'passenger').toString().toLowerCase();
-        final storedRole =
-            roleString == 'staff' ? UserRole.staff : UserRole.passenger;
+        final storedRole = roleString == 'staff'
+            ? UserRole.staff
+            : UserRole.passenger;
 
         final profileUser = UserProfile(
           id: firebaseUser.uid,
-          name: (profileData['name'] ?? '').toString().trim().isNotEmpty
-              ? profileData['name']
-              : (firebaseUser.displayName ?? 'Google User'),
+          name: profileData['name'] ??
+              firebaseUser.displayName ??
+              'RailSahayak User',
           username: profileData['username'] ?? '',
-          email: (profileData['email'] ?? '').toString().trim().isNotEmpty
-              ? profileData['email']
-              : (firebaseUser.email ?? googleUser.email),
+          email: profileData['email'] ??
+              firebaseUser.email ??
+              googleUser.email,
           phone: profileData['phone'] ?? '',
           role: storedRole,
           disabilityType: profileData['disabilityType'],
@@ -345,7 +366,6 @@ class RequestProvider extends ChangeNotifier {
         } else {
           final selectedRole =
               isStaff ? UserRole.staff : UserRole.passenger;
-
           if (selectedRole != storedRole) {
             await _auth.signOut();
             await _googleSignIn.signOut();
@@ -354,7 +374,6 @@ class RequestProvider extends ChangeNotifier {
             _clearPendingGoogleProfile();
             return false;
           }
-
           _currentUser = profileUser;
         }
 
@@ -363,10 +382,10 @@ class RequestProvider extends ChangeNotifier {
         _pendingGoogleEmail = _currentUser!.email;
         _pendingGoogleName = _currentUser!.name;
 
-        if (_needsProfileCompletion) {
-          await _stopRequestListener();
-        } else {
+        if (!_needsProfileCompletion) {
           await _startRequestListener();
+        } else {
+          await _stopRequestListener();
         }
 
         return true;
@@ -407,9 +426,9 @@ class RequestProvider extends ChangeNotifier {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // PHONE OTP
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // PHONE OTP VERIFICATION
+  // ===========================================================================
 
   String _formatIndianPhone(String phone) {
     final digits = phone.replaceAll(RegExp(r'\D'), '');
@@ -429,7 +448,6 @@ class RequestProvider extends ChangeNotifier {
 
   Future<bool> sendPhoneOtp(String phone, {bool resend = false}) async {
     final firebaseUser = _auth.currentUser;
-
     if (firebaseUser == null) {
       _phoneVerificationError =
           'You must be signed in before verifying your phone number.';
@@ -457,10 +475,14 @@ class RequestProvider extends ChangeNotifier {
       await _auth.verifyPhoneNumber(
         phoneNumber: formattedPhone,
         forceResendingToken: resend ? _phoneResendToken : null,
-        verificationCompleted: (PhoneAuthCredential credential) async {
+        verificationCompleted: (credential) async {
           try {
             final currentUser = _auth.currentUser;
-            if (currentUser == null) return;
+            if (currentUser == null) {
+              _phoneVerificationError =
+                  'Your sign-in session expired. Please sign in again.';
+              return;
+            }
             await currentUser.linkWithCredential(credential);
             _phoneVerified = true;
             _pendingVerifiedPhone = cleanPhone;
@@ -479,27 +501,16 @@ class RequestProvider extends ChangeNotifier {
               _phoneVerificationError =
                   'Could not link this phone number. Please try again.';
             }
+          } catch (e) {
+            _phoneVerificationError =
+                'Could not verify this phone number. Please try again.';
           }
           notifyListeners();
         },
         verificationFailed: (FirebaseAuthException e) {
           _phoneVerificationInProgress = false;
-          switch (e.code) {
-            case 'invalid-phone-number':
-              _phoneVerificationError = 'The phone number is invalid.';
-              break;
-            case 'too-many-requests':
-              _phoneVerificationError =
-                  'Too many verification attempts. Please try again later.';
-              break;
-            case 'quota-exceeded':
-              _phoneVerificationError =
-                  'SMS verification quota exceeded. Please try again later.';
-              break;
-            default:
-              _phoneVerificationError =
-                  e.message ?? 'Could not send the verification code.';
-          }
+          _phoneVerificationError = e.message ??
+              'Could not send the verification code.';
           notifyListeners();
         },
         codeSent: (String verificationId, int? resendToken) {
@@ -520,7 +531,6 @@ class RequestProvider extends ChangeNotifier {
       _phoneVerificationInProgress = false;
       _phoneVerificationError =
           'Could not start phone verification. Please try again.';
-      debugPrint('Phone OTP error: $e');
       notifyListeners();
       return false;
     }
@@ -569,26 +579,10 @@ class RequestProvider extends ChangeNotifier {
       return true;
     } on FirebaseAuthException catch (e) {
       _phoneVerificationInProgress = false;
-      switch (e.code) {
-        case 'invalid-verification-code':
-          _phoneVerificationError =
-              'Incorrect OTP. Please check the code and try again.';
-          break;
-        case 'session-expired':
-          _phoneVerificationError =
-              'This OTP has expired. Please request a new one.';
-          break;
-        case 'credential-already-in-use':
-          _phoneVerificationError =
-              'This phone number is already linked to another account.';
-          break;
-        case 'provider-already-linked':
-          _phoneVerified = true;
-          _phoneVerificationError = null;
-          break;
-        default:
-          _phoneVerificationError =
-              e.message ?? 'Could not verify the OTP.';
+      _phoneVerificationError = e.message ?? 'Could not verify the OTP.';
+      if (e.code == 'provider-already-linked') {
+        _phoneVerified = true;
+        _phoneVerificationError = null;
       }
       notifyListeners();
       return _phoneVerified;
@@ -606,9 +600,9 @@ class RequestProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ---------------------------------------------------------------------------
-  // PROFILE COMPLETION
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // COMPLETE PROFILE
+  // ===========================================================================
 
   Future<bool> completeProfile({
     required String username,
@@ -685,117 +679,12 @@ class RequestProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> completeGoogleProfile({
-    required String username,
-    required String phone,
-    required UserRole role,
-    String? disabilityType,
-    String? preferredAssistance,
-  }) async {
-    final user = _currentUser;
-    if (user == null) return false;
-
-    _currentUser = UserProfile(
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      email: user.email,
-      phone: user.phone,
-      role: role,
-      disabilityType: disabilityType ?? user.disabilityType,
-      preferredAssistance:
-          preferredAssistance ?? user.preferredAssistance,
-    );
-
-    final success = await completeProfile(
-      username: username,
-      phone: phone,
-    );
-
-    if (!success) _currentUser = user;
-    return success;
-  }
-
-  // ---------------------------------------------------------------------------
-  // SIGNUP
-  // ---------------------------------------------------------------------------
-
-  Future<bool> signup({
-    required String name,
-    required String username,
-    required String email,
-    required String phone,
-    required String password,
-    required UserRole role,
-    String? disabilityType,
-    String? preferredAssistance,
-  }) async {
-    _isLoading = true;
-    notifyListeners();
-
-    try {
-      final cleanName = name.trim();
-      final cleanUsername = username.trim().toLowerCase();
-      final cleanEmail = email.trim().toLowerCase();
-      final cleanPhone = phone.trim();
-
-      final usernameCheck = await _firestore
-          .collection('users')
-          .where('username', isEqualTo: cleanUsername)
-          .limit(1)
-          .get();
-
-      if (usernameCheck.docs.isNotEmpty) return false;
-
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: cleanEmail,
-        password: password,
-      );
-
-      final firebaseUser = credential.user;
-      if (firebaseUser == null) return false;
-
-      await firebaseUser.updateDisplayName(cleanName);
-
-      final newUser = UserProfile(
-        id: firebaseUser.uid,
-        name: cleanName,
-        username: cleanUsername,
-        email: cleanEmail,
-        phone: cleanPhone,
-        role: role,
-        disabilityType: disabilityType,
-        preferredAssistance: preferredAssistance,
-      );
-
-      await _firestore
-          .collection('users')
-          .doc(firebaseUser.uid)
-          .set(newUser.toMap());
-
-      _currentUser = newUser;
-      _needsProfileCompletion = false;
-      await _startRequestListener();
-      return true;
-    } on FirebaseAuthException catch (e) {
-      debugPrint('Firebase signup error: ${e.code}');
-      return false;
-    } catch (e) {
-      debugPrint('Signup error: $e');
-      return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // LOGOUT
   // ---------------------------------------------------------------------------
 
   Future<void> logout() async {
     await _stopRequestListener();
-
     _currentUser = null;
     _needsProfileCompletion = false;
     _clearPendingGoogleProfile();
@@ -813,20 +702,12 @@ class RequestProvider extends ChangeNotifier {
     } catch (e) {
       debugPrint('Google sign-out error: $e');
     }
-
-    notifyListeners();
   }
 
   void _clearPendingGoogleProfile() {
     _pendingGoogleUser = null;
     _pendingGoogleEmail = null;
     _pendingGoogleName = null;
-  }
-
-  @override
-  void dispose() {
-    _requestsSubscription?.cancel();
-    super.dispose();
   }
 
   // ---------------------------------------------------------------------------
@@ -844,9 +725,7 @@ class RequestProvider extends ChangeNotifier {
       return;
     }
 
-    Query<Map<String, dynamic>> query =
-        _firestore.collection('requests');
-
+    Query<Map<String, dynamic>> query = _firestore.collection('requests');
     if (user.role == UserRole.passenger) {
       query = query.where('passengerId', isEqualTo: user.id);
     }
@@ -856,13 +735,10 @@ class RequestProvider extends ChangeNotifier {
         final loaded = snapshot.docs.map((doc) {
           return AssistanceRequest.fromMap(doc.data(), doc.id);
         }).toList();
-
         loaded.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-
         _requests
           ..clear()
           ..addAll(loaded);
-
         notifyListeners();
       },
       onError: (Object error, StackTrace stackTrace) {
@@ -876,10 +752,6 @@ class RequestProvider extends ChangeNotifier {
     _requestsSubscription = null;
     _requests.clear();
   }
-
-  // ---------------------------------------------------------------------------
-  // REQUEST OPERATIONS
-  // ---------------------------------------------------------------------------
 
   Future<bool> submitRequest({
     required String pnr,
@@ -896,7 +768,6 @@ class RequestProvider extends ChangeNotifier {
 
     try {
       final docRef = _firestore.collection('requests').doc();
-
       final request = AssistanceRequest(
         id: docRef.id,
         pnr: pnr.trim(),
@@ -910,12 +781,8 @@ class RequestProvider extends ChangeNotifier {
         timestamp: DateTime.now(),
         notes: notes?.trim(),
       );
-
       await docRef.set(request.toMap());
       return true;
-    } on FirebaseException catch (e) {
-      debugPrint('Firestore submit request error: ${e.code} ${e.message}');
-      return false;
     } catch (e) {
       debugPrint('Submit request error: $e');
       return false;
@@ -941,15 +808,8 @@ class RequestProvider extends ChangeNotifier {
       final data = <String, dynamic>{'status': newStatus};
       if (staffId != null) data['staffId'] = staffId;
       if (staffName != null) data['staffName'] = staffName;
-
-      await _firestore
-          .collection('requests')
-          .doc(requestId)
-          .update(data);
+      await _firestore.collection('requests').doc(requestId).update(data);
       return true;
-    } on FirebaseException catch (e) {
-      debugPrint('Firestore update request error: ${e.code} ${e.message}');
-      return false;
     } catch (e) {
       debugPrint('Update request error: $e');
       return false;
@@ -957,5 +817,11 @@ class RequestProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _requestsSubscription?.cancel();
+    super.dispose();
   }
 }
