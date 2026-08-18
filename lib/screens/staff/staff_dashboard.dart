@@ -19,15 +19,20 @@ class _StaffDashboardState extends State<StaffDashboard> {
     final user = provider.currentUser;
     final allRequests = provider.staffRequests;
 
-    // Filter requests based on chip selection
     List<AssistanceRequest> filteredRequests = allRequests;
     if (_selectedFilter != 'All') {
-      filteredRequests = allRequests.where((req) => req.status.toLowerCase() == _selectedFilter.toLowerCase()).toList();
+      filteredRequests = allRequests
+          .where((req) =>
+              req.status.toLowerCase() == _selectedFilter.toLowerCase())
+          .toList();
     }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Staff Support Console', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'Staff Support Console',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.indigo.shade800,
         foregroundColor: Colors.white,
         actions: [
@@ -45,7 +50,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Welcome header banner for Staff
                 Container(
                   color: Colors.indigo.shade800,
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -54,7 +58,13 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     children: [
                       Text(
                         'Active Station Duty: ${user.name}',
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 4),
                       const Text(
@@ -64,13 +74,13 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     ],
                   ),
                 ),
-                
-                // Horizontal Status Filters
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                   child: Row(
-                    children: ['All', 'Requested', 'Assigned', 'Assisting', 'Completed'].map((status) {
+                    children: ['All', 'Requested', 'Assigned', 'Assisting', 'Completed']
+                        .map((status) {
                       final isSelected = _selectedFilter == status;
                       return Padding(
                         padding: const EdgeInsets.only(right: 8.0),
@@ -95,8 +105,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     }).toList(),
                   ),
                 ),
-
-                // Requests List view
                 Expanded(
                   child: filteredRequests.isEmpty
                       ? _buildEmptyState()
@@ -105,7 +113,11 @@ class _StaffDashboardState extends State<StaffDashboard> {
                           itemCount: filteredRequests.length,
                           itemBuilder: (context, index) {
                             final req = filteredRequests[index];
-                            return _buildStaffRequestCard(context, req, provider);
+                            return _buildStaffRequestCard(
+                              context,
+                              req,
+                              provider,
+                            );
                           },
                         ),
                 ),
@@ -121,11 +133,19 @@ class _StaffDashboardState extends State<StaffDashboard> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.assignment_turned_in, size: 64, color: Colors.grey.shade300),
+            Icon(
+              Icons.assignment_turned_in,
+              size: 64,
+              color: Colors.grey.shade300,
+            ),
             const SizedBox(height: 16),
             Text(
               'No assistance requests in status "$_selectedFilter"',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.grey),
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.grey,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -134,10 +154,14 @@ class _StaffDashboardState extends State<StaffDashboard> {
     );
   }
 
-  Widget _buildStaffRequestCard(BuildContext context, AssistanceRequest req, RequestProvider provider) {
+  Widget _buildStaffRequestCard(
+    BuildContext context,
+    AssistanceRequest req,
+    RequestProvider provider,
+  ) {
     Color statusColor = Colors.orange;
     IconData statusIcon = Icons.hourglass_empty;
-    
+
     if (req.status == 'Assigned') {
       statusColor = Colors.blue.shade700;
       statusIcon = Icons.assignment_ind;
@@ -160,7 +184,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: BorderSide(
-          color: isAssignedToMe ? Colors.indigo.shade800 : statusColor.withOpacity(0.3),
+          color: isAssignedToMe
+              ? Colors.indigo.shade800
+              : statusColor.withOpacity(0.3),
           width: isAssignedToMe ? 2 : 1,
         ),
       ),
@@ -169,47 +195,79 @@ class _StaffDashboardState extends State<StaffDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: Status + PNR
+            // Header: status + PNR. Flexible prevents long PNRs from overflowing.
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Chip(
-                  avatar: Icon(statusIcon, color: Colors.white, size: 14),
-                  label: Text(
-                    req.status.toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                Flexible(
+                  child: Chip(
+                    avatar: Icon(statusIcon, color: Colors.white, size: 14),
+                    label: Text(
+                      req.status.toUpperCase(),
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    backgroundColor: statusColor,
+                    visualDensity: VisualDensity.compact,
                   ),
-                  backgroundColor: statusColor,
-                  visualDensity: VisualDensity.compact,
                 ),
-                Text(
-                  'PNR: ${req.pnr}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'PNR: ${req.pnr}',
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
                 ),
               ],
             ),
             const Divider(height: 16),
 
-            // Passenger Name & details
+            // Passenger name + phone. Both sides are flexible.
             Row(
               children: [
                 Icon(Icons.person, color: Colors.indigo.shade800),
                 const SizedBox(width: 8),
-                Text(
-                  req.passengerName,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                Expanded(
+                  child: Text(
+                    req.passengerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: 10),
                 Icon(Icons.phone, color: Colors.grey.shade600, size: 18),
                 const SizedBox(width: 4),
-                Text(req.passengerPhone, style: const TextStyle(fontSize: 14)),
+                Flexible(
+                  child: Text(
+                    req.passengerPhone,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.end,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
 
-            // Train & Coach Details
+            // Train + coach details. The train name gets the remaining width;
+            // it is ellipsized instead of pushing the coach outside the card.
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
               decoration: BoxDecoration(
                 color: Colors.grey.shade100,
                 borderRadius: BorderRadius.circular(8),
@@ -218,38 +276,63 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 children: [
                   const Icon(Icons.train, size: 16, color: Colors.grey),
                   const SizedBox(width: 6),
-                  Text(
-                    req.trainNo,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  Expanded(
+                    child: Text(
+                      req.trainNo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 10),
                   const Icon(Icons.door_sliding, size: 16, color: Colors.grey),
-                  const SizedBox(width: 6),
-                  Text(
-                    'Coach: ${req.coach}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                  const SizedBox(width: 5),
+                  Flexible(
+                    child: Text(
+                      'Coach: ${req.coach}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
             const SizedBox(height: 12),
 
-            // Assistance items
             Wrap(
               spacing: 6,
               runSpacing: 4,
-              children: req.assistanceType.map((type) => Chip(
-                label: Text(type, style: const TextStyle(fontSize: 11)),
-                backgroundColor: Colors.indigo.shade50,
-                visualDensity: VisualDensity.compact,
-              )).toList(),
+              children: req.assistanceType
+                  .map(
+                    (type) => Chip(
+                      label: Text(
+                        type,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                      backgroundColor: Colors.indigo.shade50,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  )
+                  .toList(),
             ),
 
             if (req.notes != null && req.notes!.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
                 'Notes: ${req.notes}',
-                style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey.shade800, fontSize: 13),
+                style: TextStyle(
+                  fontStyle: FontStyle.italic,
+                  color: Colors.grey.shade800,
+                  fontSize: 13,
+                ),
               ),
             ],
 
@@ -257,16 +340,18 @@ class _StaffDashboardState extends State<StaffDashboard> {
               const SizedBox(height: 8),
               Text(
                 'Assigned to: ${req.staffName}',
-                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey, fontSize: 12),
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                  fontSize: 12,
+                ),
               ),
             ],
 
-            // Action triggers for staff
             if (req.status != 'Completed' && req.status != 'Cancelled') ...[
               const Divider(height: 24),
               Row(
                 children: [
-                  // Claim / Assign button
                   if (req.status == 'Requested')
                     Expanded(
                       child: ElevatedButton.icon(
@@ -288,7 +373,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
                       ),
                     ),
 
-                  // Assisting transition button
                   if (req.status == 'Assigned' && isAssignedToMe)
                     Expanded(
                       child: ElevatedButton.icon(
@@ -305,7 +389,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
                       ),
                     ),
 
-                  // Complete assistance button
                   if (req.status == 'Assisting' && isAssignedToMe)
                     Expanded(
                       child: ElevatedButton.icon(
@@ -330,6 +413,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
     );
   }
 }
+
 extension ChoiceChipExtension on ChoiceChip {
   Color? get textColor => labelStyle?.color;
 }
