@@ -200,7 +200,7 @@ class _MyAppState extends State<MyApp> {
 
   Widget _getHomeRoute(UserProfile? user, bool needsProfileCompletion) {
     if (user == null) return const LoginScreen();
-    if (needsProfileCompletion) return const ProfileCompletionScreen();
+    if (needsProfileCompletion) return ProfileCompletionScreen();
     if (user.role == UserRole.staff) return const StaffDashboard();
     return const PassengerHome();
   }
