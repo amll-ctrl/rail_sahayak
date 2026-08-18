@@ -1,14 +1,107 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/user_profile.dart';
 import '../../providers/request_provider.dart';
 
-class AdminDashboard extends StatelessWidget {
+class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
 
-  Future<void> _logout(BuildContext context) async {
+  @override
+  State<AdminDashboard> createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends State<AdminDashboard> {
+  Future<List<UserProfile>>? _staffFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _staffFuture = _loadApprovedStaff();
+  }
+
+  Future<List<UserProfile>> _loadApprovedStaff() async {
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('role', isEqualTo: 'staff')
+        .get();
+    return snapshot.docs
+        .map((doc) => UserProfile.fromMap(doc.data(), doc.id))
+        .toList();
+  }
+
+  Future<void> _refresh() async {
+    final provider = context.read<RequestProvider>();
+    await provider.refreshAdminData();
+    if (!mounted) return;
+    setState(() => _staffFuture = _loadApprovedStaff());
+    await _staffFuture;
+  }
+
+  Future<void> _resetPassword(String email) async {
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Password reset email sent to $email'), backgroundColor: Colors.green.shade700),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message ?? 'Could not send password reset email.'), backgroundColor: Colors.red),
+      );
+    }
+  }
+
+  Future<void> _logout() async {
     await context.read<RequestProvider>().logout();
+  }
+
+  Widget _staffTile(UserProfile staff, {bool pending = false}) {
+    final provider = context.read<RequestProvider>();
+    return Card(
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: pending ? Colors.orange.shade50 : Colors.green.shade50,
+          child: Icon(Icons.badge_outlined, color: pending ? Colors.orange.shade800 : Colors.green.shade700),
+        ),
+        title: Text(staff.name.isNotEmpty ? staff.name : 'Railway Staff'),
+        subtitle: Text('${staff.email}\n${staff.phone.isNotEmpty ? staff.phone : 'No phone listed'}'),
+        isThreeLine: true,
+        trailing: pending
+            ? Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: 'Approve staff',
+                    onPressed: () async {
+                      await provider.approveStaff(staff.id);
+                      if (mounted) setState(() => _staffFuture = _loadApprovedStaff());
+                    },
+                    icon: const Icon(Icons.check_circle_outline),
+                    color: Colors.green,
+                  ),
+                  IconButton(
+                    tooltip: 'Reject account',
+                    onPressed: () async {
+                      await provider.rejectStaff(staff.id);
+                      if (mounted) setState(() {});
+                    },
+                    icon: const Icon(Icons.cancel_outlined),
+                    color: Colors.red,
+                  ),
+                ],
+              )
+            : IconButton(
+                tooltip: 'Send password reset email',
+                onPressed: () => _resetPassword(staff.email),
+                icon: const Icon(Icons.key_outlined),
+                color: Colors.indigo,
+              ),
+      ),
+    );
   }
 
   @override
@@ -18,156 +111,87 @@ class AdminDashboard extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'RailSahayak Admin',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('RailSahayak Admin', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.indigo.shade800,
         foregroundColor: Colors.white,
         actions: [
-          IconButton(
-            tooltip: 'Sign out',
-            onPressed: () => _logout(context),
-            icon: const Icon(Icons.logout),
-          ),
+          IconButton(tooltip: 'Refresh', onPressed: provider.isAdminDataLoading ? null : _refresh, icon: const Icon(Icons.refresh)),
+          IconButton(tooltip: 'Sign out', onPressed: _logout, icon: const Icon(Icons.logout)),
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await provider.refreshAdminData();
-        },
+        onRefresh: _refresh,
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
             Card(
+              color: Colors.indigo.shade800,
               child: Padding(
                 padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Administrator',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      user?.name.isNotEmpty == true ? user!.name : 'Admin',
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(user?.email ?? ''),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.indigo.shade50,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        'ADMIN',
-                        style: TextStyle(
-                          color: Colors.indigo.shade800,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Icon(Icons.admin_panel_settings, color: Colors.white, size: 34),
+                  const SizedBox(height: 12),
+                  Text(user?.name.isNotEmpty == true ? user!.name : 'Administrator', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text(user?.email ?? '', style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 12),
+                  const Text('ADMINISTRATOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2)),
+                ]),
               ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'Admin controls',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            const SizedBox(height: 22),
+            const Text('Staff Management', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Approve railway staff and manage their company login access.', style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 12),
+            if (provider.adminStaffCandidates.isNotEmpty) ...[
+              const Text('Pending approval', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 8),
+              ...provider.adminStaffCandidates.map((staff) => _staffTile(staff, pending: true)),
+              const SizedBox(height: 14),
+            ],
+            const Text('Approved staff', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            FutureBuilder<List<UserProfile>>(
+              future: _staffFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
+                }
+                if (snapshot.hasError) {
+                  return Card(child: ListTile(title: const Text('Could not load staff'), subtitle: Text('${snapshot.error}')));
+                }
+                final staff = snapshot.data ?? [];
+                if (staff.isEmpty) {
+                  return const Card(child: ListTile(leading: Icon(Icons.info_outline), title: Text('No approved staff yet'), subtitle: Text('Approved staff accounts will appear here.')));
+                }
+                return Column(children: staff.map(_staffTile).toList());
+              },
             ),
-            const SizedBox(height: 10),
-            Card(
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.indigo.shade50,
-                  child: Icon(
-                    Icons.badge_outlined,
-                    color: Colors.indigo.shade800,
-                  ),
-                ),
-                title: const Text('Staff management'),
-                subtitle: Text(
-                  provider.adminStaffCandidates.isEmpty
-                      ? 'No pending staff accounts.'
-                      : '${provider.adminStaffCandidates.length} pending account(s)',
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            ...provider.adminStaffCandidates.map(
-              (candidate) => Card(
-                child: ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: Text(
-                    candidate.name.isNotEmpty ? candidate.name : candidate.email,
-                  ),
-                  subtitle: Text(
-                    '${candidate.email}\n@${candidate.username}',
-                  ),
-                  isThreeLine: true,
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        tooltip: 'Approve staff',
-                        onPressed: () async {
-                          await provider.approveStaff(candidate.id);
-                        },
-                        icon: const Icon(Icons.check_circle_outline),
-                        color: Colors.green.shade700,
-                      ),
-                      IconButton(
-                        tooltip: 'Reject account',
-                        onPressed: () async {
-                          await provider.rejectStaff(candidate.id);
-                        },
-                        icon: const Icon(Icons.cancel_outlined),
-                        color: Colors.red.shade700,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(18),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Requests overview',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Text('Total requests: ${provider.staffRequests.length}'),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Admin can monitor the same live Firestore request data used by railway staff.',
-                      style: TextStyle(color: Colors.grey),
-                    ),
-                  ],
-                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Staff login security', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  const Text('Staff sign in with their approved company email and Firebase password. Actual passwords are never displayed or stored in Firestore.', style: TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 10),
+                  Row(children: [Icon(Icons.email_outlined, size: 20, color: Colors.indigo.shade700), const SizedBox(width: 8), const Expanded(child: Text('Use “Reset password” to send a secure password-reset email.'))]),
+                ]),
+              ),
+            ),
+            const SizedBox(height: 22),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(18),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text('Requests overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
+                  Text('Total live requests: ${provider.staffRequests.length}'),
+                  const SizedBox(height: 6),
+                  const Text('The admin can monitor the same live Firestore request data used by railway staff.', style: TextStyle(color: Colors.grey)),
+                ]),
               ),
             ),
           ],
