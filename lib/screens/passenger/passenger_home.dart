@@ -35,41 +35,33 @@ class PassengerHome extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Welcome Card with User details
                   _buildWelcomeCard(context, user),
                   const SizedBox(height: 24),
-
-                  // Active Request Heading
                   Row(
-  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-  crossAxisAlignment: CrossAxisAlignment.center,
-  children: [
-    const Expanded(
-      child: Text(
-        'My Assistance Requests',
-        style: TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-        ),
-        overflow: TextOverflow.ellipsis,
-      ),
-    ),
-    const SizedBox(width: 8),
-    if (activeRequests.isEmpty)
-      ElevatedButton.icon(
-        onPressed: () => _navigateToRequestForm(context),
-        icon: const Icon(Icons.add),
-        label: const Text('New Request'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green.shade700,
-          foregroundColor: Colors.white,
-        ),
-      ),
-  ],
-),
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      const Expanded(
+                        child: Text(
+                          'My Assistance Requests',
+                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _navigateToRequestForm(context),
+                        icon: const Icon(Icons.add, size: 20),
+                        label: const Text('New Request'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green.shade700,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        ),
+                      ),
+                    ],
+                  ),
                   const SizedBox(height: 12),
-
-                  // Requests List
                   if (activeRequests.isEmpty)
                     _buildEmptyStateCard(context)
                   else
@@ -172,10 +164,9 @@ class PassengerHome extends StatelessWidget {
   }
 
   Widget _buildRequestCard(BuildContext context, AssistanceRequest req, RequestProvider provider) {
-    // Accessibility color maps for statuses
     Color statusColor = Colors.orange;
     IconData statusIcon = Icons.hourglass_empty;
-    
+
     if (req.status == 'Assigned') {
       statusColor = Colors.blue.shade700;
       statusIcon = Icons.assignment_ind;
@@ -204,7 +195,6 @@ class PassengerHome extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Status bar
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -223,44 +213,31 @@ class PassengerHome extends StatelessWidget {
               ],
             ),
             const Divider(height: 20),
-            
-            // Train & Coach Info
             Row(
-  children: [
-    const Icon(Icons.train, color: Colors.grey),
-    const SizedBox(width: 8),
-    Flexible(
-      child: Text(
-        'Train: ${req.trainNo}',
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-        overflow: TextOverflow.ellipsis,
-      ),
-    ),
-    const SizedBox(width: 16),
-    const Icon(Icons.door_sliding, color: Colors.grey),
-    const SizedBox(width: 8),
-    Flexible(
-      child: Text(
-        'Coach: ${req.coach}',
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-        ),
-        overflow: TextOverflow.ellipsis,
-      ),
-    ),
-  ],
-),
-            const SizedBox(height: 12),
-            
-            // Assistance items
-            const Text(
-              'Required Assistance:',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              children: [
+                const Icon(Icons.train, color: Colors.grey),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Train: ${req.trainNo}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Icon(Icons.door_sliding, color: Colors.grey),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'Coach: ${req.coach}',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
+            const SizedBox(height: 12),
+            const Text('Required Assistance:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             const SizedBox(height: 4),
             Wrap(
               spacing: 6,
@@ -271,78 +248,51 @@ class PassengerHome extends StatelessWidget {
                 visualDensity: VisualDensity.compact,
               )).toList(),
             ),
-            
             if (req.notes != null && req.notes!.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text(
-                'Notes: ${req.notes}',
-                style: const TextStyle(fontStyle: FontStyle.italic, color: Color(0xFF212121)),
-              ),
+              Text('Notes: ${req.notes}', style: const TextStyle(fontStyle: FontStyle.italic, color: Color(0xFF212121))),
             ],
-
             if (req.staffName != null) ...[
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
                 child: Row(
                   children: [
                     Icon(Icons.person_pin, color: Colors.blue.shade800),
                     const SizedBox(width: 8),
-                    Text(
-                      'Assigned Staff: ${req.staffName}',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900),
-                    ),
+                    Text('Assigned Staff: ${req.staffName}', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue.shade900)),
                   ],
                 ),
               ),
             ],
-
             const SizedBox(height: 16),
-
-            // Large Accessibility Panic/Ready Check-in Alert button
             if (!isNotInteractable) ...[
               ElevatedButton.icon(
                 onPressed: req.status == 'Assisting' ? null : () async {
                   await provider.updateRequestStatus(req.id, 'Assisting');
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Alert Sent! Staff notified that you are at the station.'),
-                        backgroundColor: Colors.blueAccent,
-                      ),
+                      const SnackBar(content: Text('Alert Sent! Staff notified that you are at the station.'), backgroundColor: Colors.blueAccent),
                     );
                   }
                 },
                 icon: const Icon(Icons.spatial_audio_off, color: Colors.white),
-                label: const Text(
-                  'I AM AT THE STATION / READY TO BOARD',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
+                label: const Text('I AM AT THE STATION / READY TO BOARD', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red.shade800,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   minimumSize: const Size(double.infinity, 50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 8),
-              
-              // Cancel assistance trigger
               OutlinedButton(
                 onPressed: () {
                   provider.updateRequestStatus(req.id, 'Cancelled');
                 },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.red),
-                  minimumSize: const Size(double.infinity, 40),
-                ),
+                style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red), minimumSize: const Size(double.infinity, 40)),
                 child: const Text('Cancel Request', style: TextStyle(color: Colors.red)),
               ),
             ],
