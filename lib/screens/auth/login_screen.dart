@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/request_provider.dart';
+import 'admin_login_screen.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -13,48 +14,34 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
-
   bool _isStaff = false;
   bool _obscurePassword = true;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
-
     FocusScope.of(context).unfocus();
-    final provider = context.read<RequestProvider>();
 
+    final provider = context.read<RequestProvider>();
     final success = await provider.login(
-      _emailController.text.trim(),
+      _identifierController.text.trim(),
       _passwordController.text,
       _isStaff,
     );
 
     if (!mounted) return;
-    if (success) {
-      final user = provider.currentUser;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            user?.role.name == 'admin'
-                ? 'Welcome to RailSahayak Admin'
-                : 'Logged in as ${user?.name ?? 'User'}',
-          ),
-          backgroundColor: Colors.green.shade700,
-        ),
-      );
-    } else {
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Incorrect username/email or password.'),
+          content: Text('Incorrect email/username or password.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -67,20 +54,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final success = await provider.signInWithGoogle(isStaff: _isStaff);
 
     if (!mounted) return;
-    if (success) {
-      final user = provider.currentUser;
-      final needsProfile = provider.needsProfileCompletion;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            needsProfile
-                ? 'Google account connected. Please complete your profile.'
-                : 'Welcome ${user?.name ?? 'User'}!',
-          ),
-          backgroundColor: Colors.green.shade700,
-        ),
-      );
-    } else {
+    if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Google sign-in failed. Please try again.'),
@@ -92,9 +66,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = context.watch<RequestProvider>().isLoading;
-    final primaryColor =
-        _isStaff ? Colors.indigo.shade800 : Colors.orange.shade800;
+    final loading = context.watch<RequestProvider>().isLoading;
+    final primary = _isStaff ? Colors.indigo.shade800 : Colors.orange.shade800;
 
     return Scaffold(
       appBar: AppBar(
@@ -102,7 +75,8 @@ class _LoginScreenState extends State<LoginScreen> {
           'RailSahayak - Accessibility',
           style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
-        backgroundColor: primaryColor,
+        backgroundColor: primary,
+        foregroundColor: Colors.white,
         centerTitle: true,
       ),
       body: Center(
@@ -112,237 +86,138 @@ class _LoginScreenState extends State<LoginScreen> {
             constraints: const BoxConstraints(maxWidth: 450),
             child: Card(
               elevation: 4,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.indigo.shade50,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.indigo.shade100),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: loading
+                            ? null
+                            : () => Navigator.of(context).push(
+                                  MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                                ),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.admin_panel_settings, color: Color(0xFF283593), size: 30),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('Administrator Login', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                  SizedBox(height: 2),
+                                  Text('Authorized admin access only', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                                ],
+                              ),
+                            ),
+                            Icon(Icons.chevron_right, color: Color(0xFF283593)),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 22),
+                    const Text('Welcome to RailSahayak', textAlign: TextAlign.center, style: TextStyle(fontSize: 27, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 6),
+                    const Text('Sign in to request or provide railway assistance.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                    const SizedBox(height: 22),
+                    Container(
+                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
+                      child: Row(
                         children: [
-                          Container(width: 30, height: 6, color: Colors.orange),
-                          Container(width: 30, height: 6, color: Colors.white),
-                          Container(width: 30, height: 6, color: Colors.green),
+                          Expanded(
+                            child: InkWell(
+                              onTap: loading ? null : () => setState(() => _isStaff = false),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                decoration: BoxDecoration(color: !_isStaff ? Colors.orange.shade800 : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+                                child: Text('Passenger', textAlign: TextAlign.center, style: TextStyle(color: !_isStaff ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: loading ? null : () => setState(() => _isStaff = true),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 13),
+                                decoration: BoxDecoration(color: _isStaff ? Colors.indigo.shade800 : Colors.transparent, borderRadius: BorderRadius.circular(12)),
+                                child: Text('Railway Staff', textAlign: TextAlign.center, style: TextStyle(color: _isStaff ? Colors.white : Colors.black87, fontWeight: FontWeight.bold)),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 16),
-                      Text(
-                        'RailSahayak',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w800,
-                          color: primaryColor,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Indian Railways Boarding Assistance App',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: InkWell(
-                                onTap: isLoading
-                                    ? null
-                                    : () => setState(() => _isStaff = false),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: !_isStaff
-                                        ? Colors.orange.shade800
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    'Passenger',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: !_isStaff
-                                          ? Colors.white
-                                          : const Color(0xFF212121),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                    ),
+                    const SizedBox(height: 22),
+                    Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _identifierController,
+                            enabled: !loading,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(labelText: 'Email or Username', prefixIcon: Icon(Icons.person_outline), border: OutlineInputBorder()),
+                            validator: (value) {
+                              final v = value?.trim() ?? '';
+                              if (v.isEmpty) return 'Please enter your email or username';
+                              if (v.contains('@') && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v)) return 'Enter a valid email address';
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            controller: _passwordController,
+                            enabled: !loading,
+                            obscureText: _obscurePassword,
+                            textInputAction: TextInputAction.done,
+                            onFieldSubmitted: (_) => loading ? null : _handleLogin(),
+                            decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => _obscurePassword = !_obscurePassword), icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off)), border: const OutlineInputBorder()),
+                            validator: (value) => value == null || value.isEmpty ? 'Please enter your password' : null,
+                          ),
+                          const SizedBox(height: 22),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 52,
+                            child: FilledButton(
+                              onPressed: loading ? null : _handleLogin,
+                              style: FilledButton.styleFrom(backgroundColor: primary),
+                              child: loading ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Login Securely', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
                             ),
-                            Expanded(
-                              child: InkWell(
-                                onTap: isLoading
-                                    ? null
-                                    : () => setState(() => _isStaff = true),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
-                                  decoration: BoxDecoration(
-                                    color: _isStaff
-                                        ? Colors.indigo.shade800
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    'Railway Staff',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: _isStaff
-                                          ? Colors.white
-                                          : const Color(0xFF212121),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
+                          ),
+                          const SizedBox(height: 14),
+                          OutlinedButton.icon(
+                            onPressed: loading ? null : _handleGoogleSignIn,
+                            icon: Icon(Icons.account_circle, color: primary),
+                            label: Text('Continue with Google', style: TextStyle(color: primary)),
+                            style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(50), side: BorderSide(color: primary)),
+                          ),
+                          if (!_isStaff) ...[
+                            const SizedBox(height: 18),
+                            const Divider(),
+                            const SizedBox(height: 8),
+                            TextButton.icon(
+                              onPressed: loading ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SignupScreen())),
+                              icon: const Icon(Icons.person_add_alt_1),
+                              label: const Text('Create Passenger Account', style: TextStyle(fontWeight: FontWeight.bold)),
                             ),
+                          ] else ...[
+                            const SizedBox(height: 14),
+                            const Text('Staff accounts are created and approved separately by an administrator.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
                           ],
-                        ),
+                        ],
                       ),
-                      const SizedBox(height: 24),
-                      TextFormField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.text,
-                        textInputAction: TextInputAction.next,
-                        decoration: InputDecoration(
-                          labelText: 'Email or Username',
-                          hintText: 'Enter your email or username',
-                          prefixIcon: const Icon(Icons.person_outline),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        validator: (value) {
-                          final identifier = value?.trim() ?? '';
-                          if (identifier.isEmpty) {
-                            return 'Please enter your email or username';
-                          }
-                          if (identifier.contains('@') &&
-                              !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
-                                  .hasMatch(identifier)) {
-                            return 'Please enter a valid email address';
-                          }
-                          if (!identifier.contains('@') && identifier.length < 3) {
-                            return 'Username must be at least 3 characters';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        textInputAction: TextInputAction.done,
-                        onFieldSubmitted: (_) {
-                          if (!isLoading) _handleLogin();
-                        },
-                        decoration: InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: const Icon(Icons.lock),
-                          suffixIcon: IconButton(
-                            icon: Icon(_obscurePassword
-                                ? Icons.visibility
-                                : Icons.visibility_off),
-                            onPressed: () => setState(
-                              () => _obscurePassword = !_obscurePassword,
-                            ),
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        validator: (value) => value == null || value.isEmpty
-                            ? 'Please enter your password'
-                            : null,
-                      ),
-                      const SizedBox(height: 24),
-                      ElevatedButton(
-                        onPressed: isLoading ? null : _handleLogin,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text(
-                                'Login Securely',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: isLoading ? null : _handleGoogleSignIn,
-                        icon: Icon(Icons.account_circle,
-                            color: primaryColor, size: 26),
-                        label: Text('Continue with Google',
-                            style: TextStyle(color: primaryColor)),
-                        style: OutlinedButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          side: BorderSide(color: primaryColor),
-                        ),
-                      ),
-                      if (!_isStaff) ...[
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
-                            const Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 12),
-                              child: Text('New to RailSahayak?'),
-                            ),
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        TextButton.icon(
-                          onPressed: isLoading
-                              ? null
-                              : () => Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) => const SignupScreen(),
-                                    ),
-                                  ),
-                          icon: const Icon(Icons.person_add_alt_1),
-                          label: const Text(
-                            'Create Passenger Account',
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ] else ...[
-                        const SizedBox(height: 14),
-                        const Text(
-                          'Staff accounts are created and approved separately by an administrator.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
-                        ),
-                      ],
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
