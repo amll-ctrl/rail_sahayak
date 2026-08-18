@@ -33,13 +33,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
     setState(() => _loading = true);
 
     try {
-      final email = _emailController.text.trim();
+      final email = _emailController.text.trim().toLowerCase();
       final password = _passwordController.text;
 
       final credential = await FirebaseAuth.instance
           .signInWithEmailAndPassword(email: email, password: password);
       final firebaseUser = credential.user;
-
       if (firebaseUser == null) {
         throw FirebaseAuthException(
           code: 'no-user',
@@ -47,37 +46,36 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         );
       }
 
-      final profile = await FirebaseFirestore.instance
-          .collection('users')
+      final adminDoc = await FirebaseFirestore.instance
+          .collection('admin')
           .doc(firebaseUser.uid)
           .get();
 
-      if (!profile.exists || profile.data() == null) {
+      if (!adminDoc.exists || adminDoc.data() == null) {
         await FirebaseAuth.instance.signOut();
         throw FirebaseAuthException(
           code: 'admin-profile-missing',
-          message:
-              'This account is authenticated, but no RailSahayak admin profile was found.',
+          message: 'This Firebase account is not registered as a RailSahayak administrator.',
         );
       }
 
-      final role = (profile.data()!['role'] ?? '').toString().toLowerCase();
-      if (role != 'admin') {
+      final data = adminDoc.data()!;
+      final role = (data['role'] ?? '').toString().toLowerCase();
+      final approved = data['approved'] == true;
+
+      if (role != 'admin' || !approved) {
         await FirebaseAuth.instance.signOut();
         throw FirebaseAuthException(
           code: 'not-admin',
-          message: 'This account is not authorized as a RailSahayak administrator.',
+          message: 'This account is not an approved RailSahayak administrator.',
         );
       }
 
-      // The provider's existing login path now has a valid Firebase session,
-      // so use it to populate the shared RequestProvider state and start the
-      // normal admin request listeners.
       final provider = context.read<RequestProvider>();
       final loaded = await provider.login(email, password, false);
 
       if (!mounted) return;
-      if (!loaded || provider.currentUser?.role.name != 'admin') {
+      if (!loaded || provider.currentUser?.role != UserRole.admin) {
         await FirebaseAuth.instance.signOut();
         throw FirebaseAuthException(
           code: 'admin-session-error',
@@ -127,11 +125,9 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       case 'too-many-requests':
         return 'Too many login attempts. Please wait a little and try again.';
       case 'admin-profile-missing':
-        return e.message ?? 'No admin profile exists for this Firebase account.';
       case 'not-admin':
-        return e.message ?? 'This account is not an administrator.';
       case 'admin-session-error':
-        return e.message ?? 'The admin session could not be initialized.';
+        return e.message ?? 'Administrator authorization failed.';
       default:
         return e.message ?? 'Administrator login failed.';
     }
