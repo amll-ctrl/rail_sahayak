@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -15,19 +17,127 @@ import 'widgets/app_splash.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  // Start the Flutter UI immediately. Firebase/Google/notifications are
+  // initialized in the background by StartupController so the animated
+  // splash can render instead of leaving a blank/native launch screen.
+  runApp(const RailSahayakBootstrap());
+}
 
-  await GoogleSignIn.instance.initialize();
-  await NotificationService.instance.initialize();
+class RailSahayakBootstrap extends StatefulWidget {
+  const RailSahayakBootstrap({super.key});
 
-  runApp(
-    ChangeNotifierProvider(
+  @override
+  State<RailSahayakBootstrap> createState() => _RailSahayakBootstrapState();
+}
+
+class _RailSahayakBootstrapState extends State<RailSahayakBootstrap> {
+  bool _initialized = false;
+  Object? _startupError;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    try {
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
+
+      await GoogleSignIn.instance.initialize();
+
+      // Notifications should never block the app from opening.
+      try {
+        await NotificationService.instance.initialize();
+      } catch (e) {
+        debugPrint('Notification startup error: $e');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _initialized = true;
+        _startupError = null;
+      });
+    } catch (e, stackTrace) {
+      debugPrint('Startup initialization error: $e');
+      debugPrint('$stackTrace');
+
+      if (!mounted) return;
+      setState(() {
+        _initialized = false;
+        _startupError = e;
+      });
+    }
+  }
+
+  Future<void> _retry() async {
+    setState(() {
+      _startupError = null;
+      _initialized = false;
+    });
+    await _initializeApp();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_startupError != null) {
+      return MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: Scaffold(
+          backgroundColor: Colors.white,
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    size: 56,
+                    color: Colors.red,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'RailSahayak could not start',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Please try again.',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: _retry,
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Retry'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (!_initialized) {
+      return const MaterialApp(
+        debugShowCheckedModeBanner: false,
+        home: AppSplash(),
+      );
+    }
+
+    return ChangeNotifierProvider(
       create: (_) => RequestProvider(),
       child: const MyApp(),
-    ),
-  );
+    );
+  }
 }
 
 class MyApp extends StatelessWidget {
@@ -48,7 +158,10 @@ class MyApp extends StatelessWidget {
           secondary: Colors.indigo.shade800,
         ),
         textTheme: const TextTheme(
-          titleLarge: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+          titleLarge: TextStyle(
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
           bodyLarge: TextStyle(fontSize: 16, height: 1.4),
           bodyMedium: TextStyle(fontSize: 14, height: 1.3),
         ),
@@ -247,7 +360,9 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
 
     try {
       final username = _usernameController.text.trim().toLowerCase();
-      final phone = _phoneController.text.trim().replaceAll(RegExp(r'[\s-]'), '');
+      final phone = _phoneController.text
+          .trim()
+          .replaceAll(RegExp(r'[\s-]'), '');
 
       final success = await provider.completeProfile(
         username: username,
@@ -295,7 +410,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         appBar: AppBar(
           title: const Text(
             'Complete Your Profile',
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
           ),
           centerTitle: true,
           backgroundColor: primaryColor,
@@ -307,7 +425,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
               icon: const Icon(Icons.logout, color: Colors.white),
               label: const Text(
                 'Sign out',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -333,19 +454,30 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                         CircleAvatar(
                           radius: 42,
                           backgroundColor: primaryColor.withValues(alpha: 0.12),
-                          child: Icon(Icons.person_outline, size: 48, color: primaryColor),
+                          child: Icon(
+                            Icons.person_outline,
+                            size: 48,
+                            color: primaryColor,
+                          ),
                         ),
                         const SizedBox(height: 20),
                         const Text(
                           'Almost there!',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: 8),
                         const Text(
                           'We need a few more details before you can use RailSahayak.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 15,
+                            height: 1.4,
+                          ),
                         ),
                         const SizedBox(height: 28),
                         if (user != null)
@@ -377,7 +509,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                Text(user.email, style: const TextStyle(color: Colors.grey)),
+                                Text(
+                                  user.email,
+                                  style: const TextStyle(color: Colors.grey),
+                                ),
                               ],
                             ),
                           ),
@@ -389,16 +524,24 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                           decoration: InputDecoration(
                             labelText: 'Username',
                             hintText: 'Choose a username',
-                            prefixIcon: Icon(Icons.person_outline, color: primaryColor),
+                            prefixIcon: Icon(
+                              Icons.person_outline,
+                              color: primaryColor,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           validator: (value) {
                             final username = value?.trim() ?? '';
-                            if (username.isEmpty) return 'Please enter a username';
-                            if (username.length < 3) return 'Username must be at least 3 characters';
-                            if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(username)) {
+                            if (username.isEmpty) {
+                              return 'Please enter a username';
+                            }
+                            if (username.length < 3) {
+                              return 'Username must be at least 3 characters';
+                            }
+                            if (!RegExp(r'^[a-zA-Z0-9_]+$')
+                                .hasMatch(username)) {
                               return 'Use only letters, numbers and _';
                             }
                             return null;
@@ -407,19 +550,27 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                         const SizedBox(height: 16),
                         TextFormField(
                           controller: _phoneController,
-                          enabled: !_isSaving && !_isVerifyingOtp && !provider.phoneVerified,
+                          enabled: !_isSaving &&
+                              !_isVerifyingOtp &&
+                              !provider.phoneVerified,
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
                             labelText: 'Phone Number',
                             hintText: 'Enter your 10-digit phone number',
-                            prefixIcon: Icon(Icons.phone_outlined, color: primaryColor),
+                            prefixIcon: Icon(
+                              Icons.phone_outlined,
+                              color: primaryColor,
+                            ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           validator: (value) {
-                            final phone = (value ?? '').replaceAll(RegExp(r'[\s-]'), '');
-                            if (phone.isEmpty) return 'Please enter your phone number';
+                            final phone = (value ?? '')
+                                .replaceAll(RegExp(r'[\s-]'), '');
+                            if (phone.isEmpty) {
+                              return 'Please enter your phone number';
+                            }
                             if (!RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
                               return 'Enter a valid 10-digit phone number';
                             }
@@ -432,7 +583,9 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               color: Colors.green.withValues(alpha: 0.08),
-                              border: Border.all(color: Colors.green.withValues(alpha: 0.35)),
+                              border: Border.all(
+                                color: Colors.green.withValues(alpha: 0.35),
+                              ),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Row(
@@ -453,18 +606,24 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                           SizedBox(
                             height: 48,
                             child: OutlinedButton.icon(
-                              onPressed: provider.phoneVerificationInProgress ||
-                                      _isSaving ||
-                                      _isVerifyingOtp
-                                  ? null
-                                  : _sendOtp,
+                              onPressed:
+                                  provider.phoneVerificationInProgress ||
+                                          _isSaving ||
+                                          _isVerifyingOtp
+                                      ? null
+                                      : _sendOtp,
                               icon: provider.phoneVerificationInProgress
                                   ? const SizedBox(
                                       height: 18,
                                       width: 18,
-                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
                                     )
-                                  : Icon(Icons.sms_outlined, color: primaryColor),
+                                  : Icon(
+                                      Icons.sms_outlined,
+                                      color: primaryColor,
+                                    ),
                               label: Text(
                                 _otpSent ? 'Resend OTP' : 'Send OTP',
                                 style: TextStyle(
@@ -486,7 +645,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                               labelText: 'Enter OTP',
                               hintText: '6-digit code',
                               counterText: '',
-                              prefixIcon: Icon(Icons.lock_outline, color: primaryColor),
+                              prefixIcon: Icon(
+                                Icons.lock_outline,
+                                color: primaryColor,
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -496,7 +658,9 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                           SizedBox(
                             height: 48,
                             child: ElevatedButton(
-                              onPressed: _isVerifyingOtp || _isSaving ? null : _verifyOtp,
+                              onPressed: _isVerifyingOtp || _isSaving
+                                  ? null
+                                  : _verifyOtp,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: primaryColor,
                                 foregroundColor: Colors.white,
@@ -510,12 +674,17 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                                       width: 20,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2.5,
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                          Colors.white,
+                                        ),
                                       ),
                                     )
                                   : const Text(
                                       'Verify Phone',
-                                      style: TextStyle(fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                             ),
                           ),
@@ -540,7 +709,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                                     width: 22,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2.5,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                      valueColor:
+                                          AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
                                     ),
                                   )
                                 : const Text(
@@ -556,7 +728,10 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                         const Text(
                           'You can safely sign out and return later. Your Google account remains linked to your RailSahayak profile.',
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
