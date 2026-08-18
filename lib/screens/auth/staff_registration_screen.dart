@@ -38,11 +38,15 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
     final email = _emailController.text.trim().toLowerCase();
     final phone = _phoneController.text.replaceAll(RegExp(r'[\s-]'), '');
     final name = _nameController.text.trim();
+    final password = _passwordController.text;
+
+    UserCredential? credential;
 
     try {
       final existing = await FirebaseFirestore.instance
           .collection('staff_requests')
           .where('email', isEqualTo: email)
+          .where('status', whereIn: ['pending', 'approved'])
           .limit(1)
           .get();
       if (existing.docs.isNotEmpty) {
@@ -50,7 +54,30 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
         return;
       }
 
+      // Create the real Firebase Authentication account now. The account
+      // remains unable to enter Staff Dashboard until an admin approves the
+      // corresponding Firestore staff request.
+      try {
+        credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'email-already-in-use') {
+          _show('This company email already has a Firebase account. Use Staff Login or reset its password.', isError: true);
+        } else if (e.code == 'invalid-email') {
+          _show('Please enter a valid company email address.', isError: true);
+        } else if (e.code == 'weak-password') {
+          _show('Choose a stronger password (at least 6 characters).', isError: true);
+        } else {
+          _show(e.message ?? 'Could not create the staff account.', isError: true);
+        }
+        return;
+      }
+
+      final uid = credential.user!.uid;
       await FirebaseFirestore.instance.collection('staff_requests').add({
+        'uid': uid,
         'name': name,
         'email': email,
         'phone': phone,
@@ -58,9 +85,16 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      _show('Staff request submitted. An administrator must approve it before you can use Staff Login.');
+      // Registration temporarily signs the new account in. Sign it back out
+      // so the applicant cannot bypass administrator approval.
+      await FirebaseAuth.instance.signOut();
+
+      _show('Staff account created. An administrator must approve it before you can use Staff Login.');
       if (mounted) Navigator.of(context).pop();
     } on FirebaseException catch (e) {
+      // If Firestore fails after Auth account creation, leave the Auth account
+      // intact so the same email can be recovered rather than creating a
+      // second account. The admin can still inspect/remove it in Firebase.
       _show(e.message ?? 'Could not submit the staff request.', isError: true);
     } catch (e) {
       _show('Could not submit the staff request: $e', isError: true);
@@ -107,7 +141,7 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
                       const SizedBox(height: 12),
                       const Text('Request Staff Access', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      const Text('Submit your RailSahayak staff details. The administrator will review and approve your request before login is enabled.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                      const Text('Create your RailSahayak staff account. The administrator will review and approve your request before Staff Login is enabled.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                       const SizedBox(height: 24),
                       TextFormField(
                         controller: _nameController,
@@ -139,7 +173,7 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
                         controller: _passwordController,
                         enabled: !_loading,
                         obscureText: _obscurePassword,
-                        decoration: InputDecoration(labelText: 'Desired Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => _obscurePassword = !_obscurePassword), icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off)), border: const OutlineInputBorder()),
+                        decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => _obscurePassword = !_obscurePassword), icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off)), border: const OutlineInputBorder()),
                         validator: (v) => v == null || v.length < 6 ? 'Use at least 6 characters' : null,
                       ),
                       const SizedBox(height: 16),
@@ -157,11 +191,11 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
                           onPressed: _loading ? null : _submit,
                           style: FilledButton.styleFrom(backgroundColor: primary),
                           icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.send),
-                          label: Text(_loading ? 'Submitting...' : 'Submit for Approval'),
+                          label: Text(_loading ? 'Creating account...' : 'Submit for Approval'),
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text('Your password is only used locally to help you prepare your account. It is not stored in the staff request. After approval, you will create or reset your Firebase password using the approved company email.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey)),
+                      const Text('Your password is used only to create your Firebase Authentication account. It is never stored in the staff request. The account cannot access Staff Dashboard until an administrator approves the request.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, color: Colors.grey)),
                     ],
                   ),
                 ),
