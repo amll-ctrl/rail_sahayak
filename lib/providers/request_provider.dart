@@ -64,12 +64,46 @@ class RequestProvider extends ChangeNotifier {
     catch (e) { debugPrint('Admin data refresh error: $e'); }
     finally { _adminDataLoading = false; notifyListeners(); }
   }
+
+  /// Establishes an administrator session from the already-verified `admin/{uid}`
+  /// Firestore document. Admins intentionally live in the `admin` collection,
+  /// not `users`, so normal passenger login must not be used for this path.
+  Future<void> setAdminSession({required String uid, required Map<String, dynamic> data}) async {
+    _currentUser = UserProfile(
+      id: uid,
+      name: (data['name'] ?? 'Administrator').toString(),
+      username: (data['username'] ?? '').toString(),
+      email: (data['email'] ?? _auth.currentUser?.email ?? '').toString(),
+      phone: (data['phone'] ?? '').toString(),
+      role: UserRole.admin,
+    );
+    _needsProfileCompletion = false;
+    _clearPendingGoogleProfile();
+    _isSessionInitialized = true;
+    await _startRequestListener();
+    await refreshAdminData();
+    notifyListeners();
+  }
+
   Future<void> completePassengerSignupSession(UserProfile user) async { _currentUser = user; _needsProfileCompletion = false; _clearPendingGoogleProfile(); _isSessionInitialized = true; await _startRequestListener(); notifyListeners(); }
 
   Future<void> _restoreSession() async {
     try {
       final firebaseUser = _auth.currentUser; if (firebaseUser == null) return;
       await firebaseUser.reload(); final refreshed = _auth.currentUser; if (refreshed == null) return;
+
+      // Administrators are stored in `admin/{uid}` rather than `users/{uid}`.
+      final adminDoc = await _firestore.collection('admin').doc(refreshed.uid).get();
+      if (adminDoc.exists && adminDoc.data() != null) {
+        final data = adminDoc.data()!;
+        if (data['role']?.toString().toLowerCase() == 'admin' && data['approved'] == true) {
+          await setAdminSession(uid: refreshed.uid, data: data);
+          return;
+        }
+        await _auth.signOut();
+        return;
+      }
+
       final doc = await _firestore.collection('users').doc(refreshed.uid).get();
       if (doc.exists && doc.data() != null) {
         _currentUser = UserProfile.fromMap(doc.data()!, refreshed.uid);
@@ -77,7 +111,6 @@ class RequestProvider extends ChangeNotifier {
           _currentUser = UserProfile(id: refreshed.uid, name: _currentUser!.name.trim().isEmpty ? (refreshed.displayName ?? 'RailSahayak User') : _currentUser!.name, username: _currentUser!.username, email: _currentUser!.email.trim().isEmpty ? (refreshed.email ?? '') : _currentUser!.email, phone: _currentUser!.phone, role: _currentUser!.role, disabilityType: _currentUser!.disabilityType, preferredAssistance: _currentUser!.preferredAssistance);
         }
         _needsProfileCompletion = _isProfileIncomplete(_currentUser!);
-        if (_currentUser!.role == UserRole.admin) await refreshAdminData();
         if (!_needsProfileCompletion) await _startRequestListener();
       } else if (refreshed.providerData.any((p) => p.providerId == 'google.com')) {
         final name = (refreshed.displayName ?? '').trim().isEmpty ? 'Google User' : refreshed.displayName!.trim();
@@ -146,7 +179,6 @@ class RequestProvider extends ChangeNotifier {
 
       if (doc.exists && doc.data() != null) {
         final profile = UserProfile.fromMap(doc.data()!, firebaseUser.uid);
-        if (profile.role == UserRole.admin) { _currentUser = profile; _needsProfileCompletion = false; await _startRequestListener(); await refreshAdminData(); return true; }
         if (profile.role != UserRole.passenger) { await _auth.signOut(); _lastLoginError = 'This account is not registered as a passenger.'; return false; }
         _currentUser = profile;
       } else {
