@@ -70,15 +70,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         );
       }
 
-      if (!mounted) return;
-
-      // Reuse the provider's normal session restoration path so the rest of
-      // the app (dashboard, requests, logout and routing) sees the admin user.
+      // The provider's existing login path now has a valid Firebase session,
+      // so use it to populate the shared RequestProvider state and start the
+      // normal admin request listeners.
       final provider = context.read<RequestProvider>();
-      await provider.restoreAuthenticatedSession();
+      final loaded = await provider.login(email, password, false);
 
       if (!mounted) return;
-      if (provider.currentUser?.role.name != 'admin') {
+      if (!loaded || provider.currentUser?.role.name != 'admin') {
         await FirebaseAuth.instance.signOut();
         throw FirebaseAuthException(
           code: 'admin-session-error',
