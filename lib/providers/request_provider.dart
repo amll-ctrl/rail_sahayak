@@ -18,6 +18,7 @@ class RequestProvider extends ChangeNotifier {
   User? _pendingGoogleUser;
   String? _pendingGoogleEmail;
   String? _pendingGoogleName;
+  String? _lastLoginError;
   final List<AssistanceRequest> _requests = [];
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _requestsSubscription;
   final List<UserProfile> _adminStaffCandidates = [];
@@ -31,6 +32,7 @@ class RequestProvider extends ChangeNotifier {
   bool get isSessionInitialized => _isSessionInitialized;
   String get pendingGoogleName => _pendingGoogleName ?? '';
   String get pendingGoogleEmail => _pendingGoogleEmail ?? '';
+  String? get lastLoginError => _lastLoginError;
   List<AssistanceRequest> get requests => List.unmodifiable(_requests);
   List<UserProfile> get adminStaffCandidates => List.unmodifiable(_adminStaffCandidates);
   bool get isAdminDataLoading => _adminDataLoading;
@@ -86,29 +88,92 @@ class RequestProvider extends ChangeNotifier {
     finally { _isSessionInitialized = true; notifyListeners(); }
   }
 
-  Future<bool> _isStaffApproved(String email) async { final normalized = email.trim().toLowerCase(); if (normalized.isEmpty) return false; final snapshot = await _firestore.collection('staff_requests').where('email', isEqualTo: normalized).where('status', isEqualTo: 'approved').limit(1).get(); return snapshot.docs.isNotEmpty; }
+  Future<bool> _isStaffApproved(String email) async {
+    final normalized = email.trim().toLowerCase();
+    if (normalized.isEmpty) return false;
+    try {
+      final userSnapshot = await _firestore.collection('users').where('email', isEqualTo: normalized).where('role', isEqualTo: 'staff').where('status', isEqualTo: 'approved').limit(1).get();
+      if (userSnapshot.docs.isNotEmpty) return true;
+    } catch (e) { debugPrint('Staff users approval check error: $e'); }
+    try {
+      final requestSnapshot = await _firestore.collection('staff_requests').where('email', isEqualTo: normalized).where('status', isEqualTo: 'approved').limit(1).get();
+      return requestSnapshot.docs.isNotEmpty;
+    } catch (e) { debugPrint('Staff request approval check error: $e'); return false; }
+  }
 
   Future<bool> login(String identifier, String password, bool isStaff) async {
-    _isLoading = true; notifyListeners();
+    _isLoading = true;
+    _lastLoginError = null;
+    notifyListeners();
     try {
-      var email = identifier.trim(); if (email.isEmpty || password.isEmpty) return false;
-      if (!isStaff && !email.contains('@')) { final query = await _firestore.collection('users').where('username', isEqualTo: email.toLowerCase()).limit(1).get(); if (query.docs.isEmpty) return false; email = (query.docs.first.data()['email'] ?? '').toString().trim(); }
-      if (isStaff && !email.contains('@')) return false;
-      if (isStaff && !await _isStaffApproved(email)) return false;
-      final credential = await _auth.signInWithEmailAndPassword(email: email, password: password); final firebaseUser = credential.user; if (firebaseUser == null) return false;
-      final ref = _firestore.collection('users').doc(firebaseUser.uid); final doc = await ref.get();
+      var email = identifier.trim();
+      if (email.isEmpty || password.isEmpty) { _lastLoginError = 'Please enter your email and password.'; return false; }
+      if (!isStaff && !email.contains('@')) {
+        final query = await _firestore.collection('users').where('username', isEqualTo: email.toLowerCase()).limit(1).get();
+        if (query.docs.isEmpty) { _lastLoginError = 'No passenger account was found for that username.'; return false; }
+        email = (query.docs.first.data()['email'] ?? '').toString().trim();
+      }
+      if (isStaff && !email.contains('@')) { _lastLoginError = 'Staff login requires the approved company email address.'; return false; }
+
+      final credential = await _auth.signInWithEmailAndPassword(email: email, password: password);
+      final firebaseUser = credential.user;
+      if (firebaseUser == null) { _lastLoginError = 'Firebase did not return a user account.'; return false; }
+
+      final ref = _firestore.collection('users').doc(firebaseUser.uid);
+      final doc = await ref.get();
+
+      if (isStaff) {
+        final approvedByUsers = doc.exists && doc.data() != null && doc.data()!['role'] == 'staff' && doc.data()!['status'] == 'approved';
+        final approvedByRequest = await _isStaffApproved(email);
+        if (!approvedByUsers && !approvedByRequest) {
+          await _auth.signOut();
+          _lastLoginError = 'This Firebase account exists, but the administrator has not approved this staff email yet.';
+          return false;
+        }
+        if (doc.exists && doc.data() != null) {
+          final data = doc.data()!;
+          _currentUser = UserProfile.fromMap({...data, 'role': 'staff'}, firebaseUser.uid);
+          await ref.set({'role': 'staff', 'status': 'approved', 'email': email}, SetOptions(merge: true));
+        } else {
+          _currentUser = UserProfile(id: firebaseUser.uid, name: firebaseUser.displayName ?? 'Railway Staff', username: email.split('@').first.toLowerCase(), email: email, phone: '', role: UserRole.staff);
+          await ref.set({..._currentUser!.toMap(), 'status': 'approved'}, SetOptions(merge: true));
+        }
+        _needsProfileCompletion = false;
+        _clearPendingGoogleProfile();
+        await _startRequestListener();
+        return true;
+      }
+
       if (doc.exists && doc.data() != null) {
-        var profile = UserProfile.fromMap(doc.data()!, firebaseUser.uid);
+        final profile = UserProfile.fromMap(doc.data()!, firebaseUser.uid);
         if (profile.role == UserRole.admin) { _currentUser = profile; _needsProfileCompletion = false; await _startRequestListener(); await refreshAdminData(); return true; }
-        if (isStaff) { if (profile.role != UserRole.staff) { await ref.set({'role': 'staff', 'status': 'approved'}, SetOptions(merge: true)); profile = UserProfile(id: profile.id, name: profile.name, username: profile.username, email: profile.email, phone: profile.phone, role: UserRole.staff, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance); } }
-        else if (profile.role != UserRole.passenger) { await _auth.signOut(); return false; }
+        if (profile.role != UserRole.passenger) { await _auth.signOut(); _lastLoginError = 'This account is not registered as a passenger.'; return false; }
         _currentUser = profile;
-      } else if (isStaff) { _currentUser = UserProfile(id: firebaseUser.uid, name: firebaseUser.displayName ?? 'Railway Staff', username: '', email: email, phone: '', role: UserRole.staff); await ref.set({..._currentUser!.toMap(), 'status': 'approved'}, SetOptions(merge: true)); }
-      else { await _auth.signOut(); return false; }
-      _needsProfileCompletion = false; _clearPendingGoogleProfile(); await _startRequestListener(); return true;
-    } on FirebaseAuthException catch (e) { debugPrint('Login error: ${e.code}'); return false; }
-    catch (e) { debugPrint('Login error: $e'); return false; }
-    finally { _isLoading = false; notifyListeners(); }
+      } else {
+        await _auth.signOut();
+        _lastLoginError = 'No RailSahayak profile was found for this Firebase account.';
+        return false;
+      }
+      _needsProfileCompletion = false;
+      _clearPendingGoogleProfile();
+      await _startRequestListener();
+      return true;
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'user-not-found': _lastLoginError = 'No Firebase account exists for this email.'; break;
+        case 'wrong-password':
+        case 'invalid-credential': _lastLoginError = 'The email or password is incorrect.'; break;
+        case 'user-disabled': _lastLoginError = 'This Firebase account has been disabled.'; break;
+        case 'too-many-requests': _lastLoginError = 'Too many login attempts. Please wait and try again.'; break;
+        default: _lastLoginError = e.message ?? 'Firebase login failed (${e.code}).';
+      }
+      debugPrint('Login error: ${e.code}');
+      return false;
+    } catch (e) {
+      _lastLoginError = 'Login failed: $e';
+      debugPrint('Login error: $e');
+      return false;
+    } finally { _isLoading = false; notifyListeners(); }
   }
 
   Future<bool> signInWithGoogle({bool isStaff = false}) async {
