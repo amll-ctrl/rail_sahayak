@@ -35,7 +35,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
       appBar: AppBar(
         title: const Text(
           'Staff Support Console',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(fontWeight: FontWeight.w500),
         ),
         backgroundColor: _blue,
         foregroundColor: Colors.white,
@@ -58,7 +58,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
             SliverToBoxAdapter(
               child: Container(
                 color: _blue,
-                padding: const EdgeInsets.fromLTRB(28, 0, 28, 20),
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -70,7 +70,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 10),
                     const Text(
                       'Assisting passengers with disabilities and boardings.',
                       style: TextStyle(color: Colors.white70, fontSize: 16),
@@ -81,7 +81,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
             ),
             SliverToBoxAdapter(
               child: SizedBox(
-                height: 86,
+                height: 88,
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
                   scrollDirection: Axis.horizontal,
@@ -171,6 +171,46 @@ class _StaffDashboardState extends State<StaffDashboard> {
         ? 'Assistance'
         : req.assistanceType.join(', ');
 
+    final canAct = status != 'Completed' && status != 'Cancelled';
+    String actionLabel;
+    IconData actionIcon;
+
+    if (status == 'Requested') {
+      actionLabel = 'Accept Request';
+      actionIcon = Icons.check;
+    } else if (status == 'Assigned' && !isAssignedToMe) {
+      actionLabel = 'Take Request';
+      actionIcon = Icons.assignment_ind_outlined;
+    } else if (status == 'Assigned') {
+      actionLabel = 'Start Assisting';
+      actionIcon = Icons.directions_walk;
+    } else if (status == 'Assisting' && !isAssignedToMe) {
+      actionLabel = 'Take Over Request';
+      actionIcon = Icons.swap_horiz;
+    } else {
+      actionLabel = 'Passenger Boarded';
+      actionIcon = Icons.check_circle_outline;
+    }
+
+    Future<void> handleAction() async {
+      if (status == 'Requested') {
+        await provider.updateRequestStatus(req.id, 'Assigned');
+      } else if (status == 'Assigned' && !isAssignedToMe) {
+        // Any approved staff member can take an unstarted assignment.
+        // updateRequestStatus records this staff member as the assignee.
+        await provider.updateRequestStatus(req.id, 'Assigned');
+      } else if (status == 'Assigned' && isAssignedToMe) {
+        await provider.updateRequestStatus(req.id, 'Assisting');
+      } else if (status == 'Assisting' && !isAssignedToMe) {
+        // Transfer the active request to the staff member who takes over,
+        // then keep it in the assisting state.
+        await provider.updateRequestStatus(req.id, 'Assigned');
+        await provider.updateRequestStatus(req.id, 'Assisting');
+      } else if (status == 'Assisting' && isAssignedToMe) {
+        await provider.updateRequestStatus(req.id, 'Completed');
+      }
+    }
+
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
@@ -194,36 +234,47 @@ class _StaffDashboardState extends State<StaffDashboard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 15,
-                    vertical: 9,
-                  ),
-                  decoration: BoxDecoration(
-                    color: statusData.color,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(statusData.icon, color: Colors.white, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        status.toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                Flexible(
+                  flex: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusData.color,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(statusData.icon, color: Colors.white, size: 18),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            status.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
+                  flex: 5,
                   child: Text(
                     'PNR: ${req.pnr}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
@@ -240,6 +291,8 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 Expanded(
                   child: Text(
                     req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 19,
                       fontWeight: FontWeight.w600,
@@ -251,8 +304,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 Flexible(
                   child: Text(
                     req.passengerPhone.isEmpty ? 'No phone' : req.passengerPhone,
-                    style: const TextStyle(fontSize: 17),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 17),
                   ),
                 ),
               ],
@@ -282,44 +336,28 @@ class _StaffDashboardState extends State<StaffDashboard> {
               ),
               child: Text(
                 assistance,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 15, color: Colors.black87),
               ),
             ),
             if (req.staffName != null && req.staffName!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                'Assigned to: ${req.staffName}',
+                status == 'Completed'
+                    ? 'Done by: ${req.staffName}'
+                    : 'Assigned to: ${req.staffName}',
                 style: const TextStyle(color: Colors.grey, fontSize: 14),
               ),
             ],
-            if (status != 'Completed' && status != 'Cancelled') ...[
+            if (canAct) ...[
               const Divider(height: 30),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
-                  onPressed: () {
-                    if (status == 'Requested') {
-                      provider.updateRequestStatus(req.id, 'Assigned');
-                    } else if (status == 'Assigned' && isAssignedToMe) {
-                      provider.updateRequestStatus(req.id, 'Assisting');
-                    } else if (status == 'Assisting' && isAssignedToMe) {
-                      provider.updateRequestStatus(req.id, 'Completed');
-                    }
-                  },
-                  icon: Icon(
-                    status == 'Requested'
-                        ? Icons.check
-                        : status == 'Assigned'
-                            ? Icons.directions_walk
-                            : Icons.check_circle_outline,
-                  ),
-                  label: Text(
-                    status == 'Requested'
-                        ? 'Accept Request'
-                        : status == 'Assigned'
-                            ? (isAssignedToMe ? 'Start Assisting' : 'Assigned to another staff')
-                            : 'Passenger Boarded',
-                  ),
+                  onPressed: provider.isLoading ? null : handleAction,
+                  icon: Icon(actionIcon),
+                  label: Text(actionLabel),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _blue,
                     foregroundColor: Colors.white,
