@@ -3,7 +3,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import '../../models/user_profile.dart';
 import '../../providers/request_provider.dart';
 import '../admin/admin_dashboard.dart';
 
@@ -72,11 +71,13 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         );
       }
 
+      // The admin profile lives in `admin/{uid}`, so do not call the normal
+      // passenger login flow (which reads `users/{uid}`).
       final provider = context.read<RequestProvider>();
-      final loaded = await provider.login(email, password, false);
+      await provider.setAdminSession(uid: firebaseUser.uid, data: data);
 
       if (!mounted) return;
-      if (!loaded || provider.currentUser?.role != UserRole.admin) {
+      if (provider.currentUser == null) {
         await FirebaseAuth.instance.signOut();
         throw FirebaseAuthException(
           code: 'admin-session-error',
@@ -177,9 +178,7 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
             constraints: const BoxConstraints(maxWidth: 440),
             child: Card(
               elevation: 5,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: Padding(
                 padding: const EdgeInsets.all(26),
                 child: Form(
@@ -193,32 +192,18 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         child: Icon(Icons.admin_panel_settings, size: 42, color: primary),
                       ),
                       const SizedBox(height: 18),
-                      const Text(
-                        'RailSahayak Administration',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800),
-                      ),
+                      const Text('RailSahayak Administration', textAlign: TextAlign.center, style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800)),
                       const SizedBox(height: 7),
-                      const Text(
-                        'Authorized administrators only',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey),
-                      ),
+                      const Text('Authorized administrators only', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
                       const SizedBox(height: 26),
                       TextFormField(
                         controller: _emailController,
                         enabled: !_loading,
                         keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'Administrator Email',
-                          prefixIcon: Icon(Icons.email_outlined),
-                          border: OutlineInputBorder(),
-                        ),
+                        decoration: const InputDecoration(labelText: 'Administrator Email', prefixIcon: Icon(Icons.email_outlined), border: OutlineInputBorder()),
                         validator: (value) {
                           final email = value?.trim() ?? '';
-                          if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-                            return 'Enter a valid administrator email';
-                          }
+                          if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) return 'Enter a valid administrator email';
                           return null;
                         },
                       ),
@@ -230,20 +215,14 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         decoration: InputDecoration(
                           labelText: 'Password',
                           prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                            icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off),
-                          ),
+                          suffixIcon: IconButton(onPressed: () => setState(() => _obscurePassword = !_obscurePassword), icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off)),
                           border: const OutlineInputBorder(),
                         ),
                         validator: (value) => value == null || value.isEmpty ? 'Enter your password' : null,
                       ),
                       Align(
                         alignment: Alignment.centerRight,
-                        child: TextButton(
-                          onPressed: _loading ? null : _forgotPassword,
-                          child: const Text('Forgot password?'),
-                        ),
+                        child: TextButton(onPressed: _loading ? null : _forgotPassword, child: const Text('Forgot password?')),
                       ),
                       const SizedBox(height: 8),
                       SizedBox(
@@ -251,21 +230,12 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
                         child: FilledButton.icon(
                           onPressed: _loading ? null : _login,
                           style: FilledButton.styleFrom(backgroundColor: primary),
-                          icon: _loading
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Icon(Icons.login),
-                          label: Text(
-                            _loading ? 'Signing in...' : 'Secure Admin Login',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
+                          icon: _loading ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.login),
+                          label: Text(_loading ? 'Signing in...' : 'Secure Admin Login', style: const TextStyle(fontWeight: FontWeight.bold)),
                         ),
                       ),
                       const SizedBox(height: 14),
-                      TextButton.icon(
-                        onPressed: _loading ? null : () => Navigator.of(context).pop(),
-                        icon: const Icon(Icons.arrow_back),
-                        label: const Text('Back to passenger / staff login'),
-                      ),
+                      TextButton.icon(onPressed: _loading ? null : () => Navigator.of(context).pop(), icon: const Icon(Icons.arrow_back), label: const Text('Back to passenger / staff login')),
                     ],
                   ),
                 ),
