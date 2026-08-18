@@ -10,6 +10,7 @@ import 'services/notification_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/passenger/passenger_home.dart';
 import 'screens/staff/staff_dashboard.dart';
+import 'widgets/app_splash.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -59,10 +60,12 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-      home: _getHomeRoute(
-        provider.currentUser,
-        provider.needsProfileCompletion,
-      ),
+      home: provider.isSessionInitialized
+          ? _getHomeRoute(
+              provider.currentUser,
+              provider.needsProfileCompletion,
+            )
+          : const AppSplash(),
     );
   }
 
