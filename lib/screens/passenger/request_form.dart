@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
+import '../../data/railway_catalog.dart';
 import '../../providers/request_provider.dart';
 
 class RequestForm extends StatefulWidget {
@@ -12,11 +14,11 @@ class RequestForm extends StatefulWidget {
 class _RequestFormState extends State<RequestForm> {
   final _formKey = GlobalKey<FormState>();
   final _pnrController = TextEditingController();
-  final _trainController = TextEditingController();
-  final _coachController = TextEditingController();
   final _notesController = TextEditingController();
 
-  // List of possible assistance types
+  RailwayTrain? _selectedTrain;
+  String? _selectedCoach;
+
   final List<Map<String, dynamic>> _assistanceOptions = [
     {'title': 'Wheelchair Assistance', 'checked': false, 'icon': Icons.wheelchair_pickup},
     {'title': 'Luggage Porter Support', 'checked': false, 'icon': Icons.luggage},
@@ -28,13 +30,11 @@ class _RequestFormState extends State<RequestForm> {
   @override
   void dispose() {
     _pnrController.dispose();
-    _trainController.dispose();
-    _coachController.dispose();
     _notesController.dispose();
     super.dispose();
   }
 
-  void _submitForm() async {
+  Future<void> _submitForm() async {
     final selectedAssistance = _assistanceOptions
         .where((opt) => opt['checked'] == true)
         .map((opt) => opt['title'] as String)
@@ -50,37 +50,47 @@ class _RequestFormState extends State<RequestForm> {
       return;
     }
 
-    if (_formKey.currentState!.validate()) {
-      final provider = Provider.of<RequestProvider>(context, listen: false);
-      
-      final success = await provider.submitRequest(
-        pnr: _pnrController.text.trim(),
-        trainNo: _trainController.text.trim(),
-        coach: _coachController.text.trim().toUpperCase(),
-        assistanceType: selectedAssistance,
-        notes: _notesController.text.trim(),
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedTrain == null || _selectedCoach == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a train and coach.'),
+          backgroundColor: Colors.red,
+        ),
       );
+      return;
+    }
 
-      if (!mounted) return;
+    final provider = Provider.of<RequestProvider>(context, listen: false);
 
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Assistance request sent to railway staff!'),
-            backgroundColor: Colors.green.shade700,
+    final success = await provider.submitRequest(
+      pnr: _pnrController.text.trim(),
+      trainNo: _selectedTrain!.label,
+      coach: _selectedCoach!,
+      assistanceType: selectedAssistance,
+      notes: _notesController.text.trim(),
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Assistance request sent to railway staff!'),
+          backgroundColor: Colors.green.shade700,
+        ),
+      );
+      Navigator.pop(context);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Could not send the request. Please check your connection and try again.',
           ),
-        );
-        Navigator.pop(context);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Could not send the request. Please check your connection and try again.',
-            ),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+          backgroundColor: Colors.red,
+        ),
+      );
     }
   }
 
@@ -107,12 +117,11 @@ class _RequestFormState extends State<RequestForm> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Please enter your booking details and specify your accessibility needs. This details will be shared with the railway station staff.',
+                'Select your train and coach from the available options. This information will be shared with railway station staff.',
                 style: TextStyle(color: Colors.grey),
               ),
               const SizedBox(height: 20),
 
-              // PNR Number Input (Exactly 10 digits validation)
               TextFormField(
                 controller: _pnrController,
                 keyboardType: TextInputType.number,
@@ -124,10 +133,9 @@ class _RequestFormState extends State<RequestForm> {
                   helperText: 'Found on your ticket printout or SMS.',
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter your PNR number';
-                  }
-                  if (value.trim().length != 10 || int.tryParse(value) == null) {
+                  final pnr = value?.trim() ?? '';
+                  if (pnr.isEmpty) return 'Please enter your PNR number';
+                  if (pnr.length != 10 || int.tryParse(pnr) == null) {
                     return 'PNR must be exactly 10 numeric digits';
                   }
                   return null;
@@ -135,60 +143,86 @@ class _RequestFormState extends State<RequestForm> {
               ),
               const SizedBox(height: 16),
 
-              // Train Number Input
-              TextFormField(
-                controller: _trainController,
+              DropdownButtonFormField<RailwayTrain>(
+                value: _selectedTrain,
+                isExpanded: true,
                 decoration: InputDecoration(
-                  labelText: 'Train Number / Name',
+                  labelText: 'Train',
                   prefixIcon: const Icon(Icons.train),
-                  hintText: 'e.g. 12626 Kerala Express',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter the Train Number or Name';
-                  }
-                  return null;
-                },
+                hint: const Text('Select your train'),
+                items: railwayTrains.map((train) {
+                  return DropdownMenuItem<RailwayTrain>(
+                    value: train,
+                    child: Text(
+                      train.label,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: isLoading
+                    ? null
+                    : (train) {
+                        setState(() {
+                          _selectedTrain = train;
+                          _selectedCoach = null;
+                        });
+                      },
+                validator: (value) =>
+                    value == null ? 'Please select your train' : null,
               ),
               const SizedBox(height: 16),
 
-              // Coach Number Input
-              TextFormField(
-                controller: _coachController,
+              DropdownButtonFormField<String>(
+                value: _selectedCoach,
+                isExpanded: true,
                 decoration: InputDecoration(
                   labelText: 'Coach Number',
                   prefixIcon: const Icon(Icons.door_sliding),
-                  hintText: 'e.g. S1, B2, A1, Gen',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please specify the coach number';
-                  }
-                  return null;
-                },
+                hint: Text(
+                  _selectedTrain == null
+                      ? 'Select a train first'
+                      : 'Select your coach',
+                ),
+                items: _selectedTrain?.coaches.map((coach) {
+                  return DropdownMenuItem<String>(
+                    value: coach,
+                    child: Text(coach),
+                  );
+                }).toList(),
+                onChanged: isLoading || _selectedTrain == null
+                    ? null
+                    : (coach) {
+                        setState(() {
+                          _selectedCoach = coach;
+                        });
+                      },
+                validator: (value) =>
+                    value == null ? 'Please select your coach' : null,
               ),
               const SizedBox(height: 24),
 
-              // Assistance Checkboxes heading
               const Text(
                 'Select Assistance Required:',
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
 
-              // Assistance Checkboxes
               ..._assistanceOptions.map((opt) {
                 return CheckboxListTile(
                   title: Text(opt['title']),
                   value: opt['checked'],
                   secondary: Icon(opt['icon'], color: Colors.orange.shade800),
-                  onChanged: (bool? val) {
-                    setState(() {
-                      opt['checked'] = val ?? false;
-                    });
-                  },
+                  onChanged: isLoading
+                      ? null
+                      : (bool? val) {
+                          setState(() {
+                            opt['checked'] = val ?? false;
+                          });
+                        },
                   activeColor: Colors.orange.shade800,
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
@@ -196,19 +230,18 @@ class _RequestFormState extends State<RequestForm> {
               }),
               const SizedBox(height: 16),
 
-              // Additional Notes
               TextFormField(
                 controller: _notesController,
                 maxLines: 3,
+                enabled: !isLoading,
                 decoration: InputDecoration(
                   labelText: 'Additional Notes / Specific Needs',
-                  hintText: 'e.g., "Need wheelchair boarding ramp on platform 4. Passenger is blind and has a heavy trolley bag."',
+                  hintText: 'e.g. Need wheelchair boarding ramp on platform 4.',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                 ),
               ),
               const SizedBox(height: 24),
 
-              // Submit Button
               ElevatedButton(
                 onPressed: isLoading ? null : _submitForm,
                 style: ElevatedButton.styleFrom(
