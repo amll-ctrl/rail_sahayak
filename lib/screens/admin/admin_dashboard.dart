@@ -60,23 +60,46 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   Future<void> _approveRequest(Map<String, dynamic> request) async {
     final requestId = request['id']?.toString() ?? '';
+    final uid = request['uid']?.toString().trim() ?? '';
     final email = (request['email'] ?? '').toString().trim().toLowerCase();
-    if (requestId.isEmpty || email.isEmpty || _busyRequestIds.contains(requestId)) {
+    final name = (request['name'] ?? '').toString().trim();
+    final phone = (request['phone'] ?? '').toString().trim();
+
+    if (requestId.isEmpty || uid.isEmpty || email.isEmpty || _busyRequestIds.contains(requestId)) {
+      if (mounted && uid.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This staff request has no Firebase account ID. Ask the staff member to submit a new request.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
       return;
     }
 
-    // Only the synchronous state update happens inside setState.
-    // Firestore work is performed afterwards so Flutter never receives
-    // an async callback from setState.
     setState(() => _busyRequestIds.add(requestId));
 
     try {
+      // The staff account was created during registration. Approval now links
+      // that Auth UID to the real staff profile used by the rest of the app.
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'id': uid,
+        'name': name.isEmpty ? 'Railway Staff' : name,
+        'username': email.split('@').first.toLowerCase(),
+        'email': email,
+        'phone': phone,
+        'role': 'staff',
+        'status': 'approved',
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
       await FirebaseFirestore.instance
           .collection('staff_requests')
           .doc(requestId)
           .update({
         'status': 'approved',
         'approvedAt': FieldValue.serverTimestamp(),
+        'approvedUid': uid,
       });
 
       if (!mounted) return;
@@ -171,10 +194,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
-          'RailSahayak Admin',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text('RailSahayak Admin', style: TextStyle(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
         actions: [
@@ -187,14 +207,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             tooltip: 'Sign out',
             onPressed: _loggingOut ? null : _logout,
             icon: _loggingOut
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: Colors.white,
-                    ),
-                  )
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Icon(Icons.logout),
           ),
         ],
@@ -215,176 +228,85 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     const SizedBox(height: 12),
                     Text(
                       user?.name.isNotEmpty == true ? user!.name : 'Administrator',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                     ),
-                    Text(
-                      user?.email ?? '',
-                      style: const TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'ADMINISTRATOR',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    const SizedBox(height: 4),
+                    Text(user?.email ?? '', style: const TextStyle(color: Colors.white70)),
                   ],
                 ),
               ),
             ),
-            const SizedBox(height: 22),
-            const Text(
-              'Staff approval requests',
-              style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Approve a staff member before they can use the Railway Staff login.',
-              style: TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
+            const Text('Staff approval requests', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
             FutureBuilder<List<Map<String, dynamic>>>(
               future: _requestsFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                  );
+                  return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
                 }
-                if (snapshot.hasError) {
-                  return Card(
-                    child: ListTile(
-                      title: const Text('Could not load staff requests'),
-                      subtitle: Text('${snapshot.error}'),
-                    ),
-                  );
-                }
-
                 final requests = snapshot.data ?? [];
-                if (requests.isEmpty) {
-                  return const Card(
-                    child: ListTile(
-                      leading: Icon(Icons.info_outline),
-                      title: Text('No pending staff requests'),
-                    ),
-                  );
-                }
-
+                if (requests.isEmpty) return const Card(child: ListTile(title: Text('No pending staff requests')));
                 return Column(
                   children: requests.map((request) {
-                    final name = (request['name'] ?? 'Railway Staff').toString();
-                    final email = (request['email'] ?? '').toString();
-                    final phone = (request['phone'] ?? '').toString();
-                    final id = (request['id'] ?? '').toString();
+                    final id = request['id']?.toString() ?? '';
                     final busy = _busyRequestIds.contains(id);
-
                     return Card(
                       child: ListTile(
                         leading: const CircleAvatar(child: Icon(Icons.badge_outlined)),
-                        title: Text(name),
-                        subtitle: Text(
-                          '$email\n${phone.isEmpty ? 'No phone listed' : phone}',
-                        ),
+                        title: Text(request['name']?.toString().isNotEmpty == true ? request['name'].toString() : 'Railway Staff'),
+                        subtitle: Text('${request['email'] ?? ''}\n${request['phone'] ?? 'No phone'}'),
                         isThreeLine: true,
-                        trailing: busy
-                            ? const SizedBox(
-                                width: 28,
-                                height: 28,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Wrap(
-                                children: [
-                                  IconButton(
-                                    tooltip: 'Approve',
-                                    onPressed: () => _approveRequest(request),
-                                    icon: const Icon(
-                                      Icons.check_circle_outline,
-                                      color: Colors.green,
-                                    ),
-                                  ),
-                                  IconButton(
-                                    tooltip: 'Reject',
-                                    onPressed: () => _rejectRequest(id),
-                                    icon: const Icon(
-                                      Icons.cancel_outlined,
-                                      color: Colors.red,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                        trailing: Wrap(
+                          spacing: 4,
+                          children: [
+                            IconButton(
+                              tooltip: 'Reject',
+                              onPressed: busy ? null : () => _rejectRequest(id),
+                              icon: const Icon(Icons.close, color: Colors.red),
+                            ),
+                            IconButton(
+                              tooltip: 'Approve',
+                              onPressed: busy ? null : () => _approveRequest(request),
+                              icon: busy
+                                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                                  : const Icon(Icons.check_circle, color: Colors.green),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   }).toList(),
                 );
               },
             ),
-            const SizedBox(height: 22),
-            const Text(
-              'Approved staff',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 24),
+            const Text('Approved staff', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
             FutureBuilder<List<UserProfile>>(
               future: _staffFuture,
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Card(
-                    child: Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Center(child: CircularProgressIndicator()),
-                    ),
-                  );
+                  return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
                 }
                 final staff = snapshot.data ?? [];
-                if (staff.isEmpty) {
-                  return const Card(
-                    child: ListTile(title: Text('No approved staff yet')),
-                  );
-                }
+                if (staff.isEmpty) return const Card(child: ListTile(title: Text('No approved staff yet')));
                 return Column(
-                  children: staff.map((m) {
-                    return Card(
-                      child: ListTile(
-                        leading: const Icon(
-                          Icons.verified_user_outlined,
-                          color: Colors.green,
-                        ),
-                        title: Text(
-                          m.name.isEmpty ? 'Railway Staff' : m.name,
-                        ),
-                        subtitle: Text(
-                          '${m.email}\n${m.phone.isEmpty ? 'No phone listed' : m.phone}',
-                        ),
-                        isThreeLine: true,
-                        trailing: IconButton(
-                          tooltip: 'Send password reset email',
-                          onPressed: m.email.isEmpty
-                              ? null
-                              : () => _resetPassword(m.email),
-                          icon: const Icon(Icons.key_outlined),
-                        ),
+                  children: staff.map((m) => Card(
+                    child: ListTile(
+                      leading: const Icon(Icons.verified_user_outlined, color: Colors.green),
+                      title: Text(m.name.isEmpty ? 'Railway Staff' : m.name),
+                      subtitle: Text('${m.email}\n${m.phone.isEmpty ? 'No phone listed' : m.phone}'),
+                      isThreeLine: true,
+                      trailing: IconButton(
+                        tooltip: 'Send password reset email',
+                        onPressed: m.email.isEmpty ? null : () => _resetPassword(m.email),
+                        icon: const Icon(Icons.key_outlined),
                       ),
-                    );
-                  }).toList(),
+                    ),
+                  )).toList(),
                 );
               },
-            ),
-            const SizedBox(height: 22),
-            const Card(
-              child: Padding(
-                padding: EdgeInsets.all(18),
-                child: Text(
-                  'Staff approval is stored in Firestore. Passwords are never stored in Firestore. Staff must authenticate with their approved company email.',
-                ),
-              ),
             ),
           ],
         ),
