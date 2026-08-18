@@ -40,13 +40,12 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
     if (!success) {
+      final message = provider.lastLoginError ??
+          (_isStaff
+              ? 'Staff login failed.'
+              : 'Incorrect email/username or password.');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(_isStaff
-              ? 'Staff login failed. Your Firebase account must exist and your approved staff record must be valid.'
-              : 'Incorrect email/username or password.'),
-          backgroundColor: Colors.red,
-        ),
+        SnackBar(content: Text(message), backgroundColor: Colors.red),
       );
     }
   }
@@ -71,7 +70,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final loading = context.watch<RequestProvider>().isLoading;
+    final provider = context.watch<RequestProvider>();
+    final loading = provider.isLoading;
     final primary = _isStaff ? Colors.indigo.shade800 : Colors.orange.shade800;
 
     return Scaffold(
