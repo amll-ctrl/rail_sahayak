@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'signup_screen.dart';
 import 'package:provider/provider.dart';
 import '../../providers/request_provider.dart';
 
@@ -12,7 +11,6 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
@@ -27,16 +25,10 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     FocusScope.of(context).unfocus();
-
-    final provider = Provider.of<RequestProvider>(
-      context,
-      listen: false,
-    );
+    final provider = context.read<RequestProvider>();
 
     try {
       final success = await provider.login(
@@ -59,22 +51,17 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              'Incorrect username/email or password.',
-            ),
+            content: Text('Incorrect username/email or password.'),
             backgroundColor: Colors.red,
             duration: Duration(seconds: 3),
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Incorrect username/email or password.',
-          ),
+          content: Text('Incorrect username/email or password.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
@@ -82,14 +69,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-
   Future<void> _handleGoogleSignIn() async {
     FocusScope.of(context).unfocus();
-
-    final provider = Provider.of<RequestProvider>(
-      context,
-      listen: false,
-    );
+    final provider = context.read<RequestProvider>();
 
     final success = await provider.signInWithGoogle(
       isStaff: _isStaff,
@@ -99,7 +81,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success) {
       final user = provider.currentUser;
-
       final needsProfile = provider.needsProfileCompletion;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -113,18 +94,10 @@ class _LoginScreenState extends State<LoginScreen> {
           duration: const Duration(seconds: 3),
         ),
       );
-
-      // Do NOT navigate directly to PassengerHome here.
-      // MyApp watches RequestProvider and will automatically route to:
-      //   - ProfileCompletionScreen when the Google profile is incomplete
-      //   - PassengerHome when the profile is complete
-      // This prevents the phone/profile screen from flashing and being skipped.
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text(
-            'Google sign-in failed. Please try again.',
-          ),
+          content: Text('Google sign-in failed. Please try again.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
@@ -135,7 +108,6 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final isLoading = context.watch<RequestProvider>().isLoading;
-
     final primaryColor =
         _isStaff ? Colors.indigo.shade800 : Colors.orange.shade800;
 
@@ -143,10 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         title: const Text(
           'RailSahayak - Accessibility',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: primaryColor,
         centerTitle: true,
@@ -170,30 +139,15 @@ class _LoginScreenState extends State<LoginScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Indian Railways Tricolour Accent
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Container(
-                              width: 30,
-                              height: 6,
-                              color: Colors.orange,
-                            ),
-                            Container(
-                              width: 30,
-                              height: 6,
-                              color: Colors.white,
-                            ),
-                            Container(
-                              width: 30,
-                              height: 6,
-                              color: Colors.green,
-                            ),
+                            Container(width: 30, height: 6, color: Colors.orange),
+                            Container(width: 30, height: 6, color: Colors.white),
+                            Container(width: 30, height: 6, color: Colors.green),
                           ],
                         ),
-
                         const SizedBox(height: 16),
-
                         Text(
                           'RailSahayak',
                           textAlign: TextAlign.center,
@@ -204,9 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             letterSpacing: 0.5,
                           ),
                         ),
-
                         const SizedBox(height: 4),
-
                         const Text(
                           'Indian Railways Boarding Assistance App',
                           textAlign: TextAlign.center,
@@ -216,10 +168,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-
                         const SizedBox(height: 24),
-
-                        // Passenger / Staff Switch
                         Container(
                           decoration: BoxDecoration(
                             color: Colors.grey.shade100,
@@ -229,31 +178,22 @@ class _LoginScreenState extends State<LoginScreen> {
                             children: [
                               Expanded(
                                 child: InkWell(
-                                  onTap: isLoading
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            _isStaff = false;
-                                          });
-                                        },
+                                  onTap: isLoading ? null : () {
+                                    setState(() => _isStaff = false);
+                                  },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: BoxDecoration(
                                       color: !_isStaff
                                           ? Colors.orange.shade800
                                           : Colors.transparent,
-                                      borderRadius:
-                                          BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
                                       'Passenger',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: !_isStaff
-                                            ? Colors.white
-                                            : const Color(0xFF212121),
+                                        color: !_isStaff ? Colors.white : const Color(0xFF212121),
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
@@ -263,31 +203,22 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               Expanded(
                                 child: InkWell(
-                                  onTap: isLoading
-                                      ? null
-                                      : () {
-                                          setState(() {
-                                            _isStaff = true;
-                                          });
-                                        },
+                                  onTap: isLoading ? null : () {
+                                    setState(() => _isStaff = true);
+                                  },
                                   child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 12,
-                                    ),
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
                                     decoration: BoxDecoration(
                                       color: _isStaff
                                           ? Colors.indigo.shade800
                                           : Colors.transparent,
-                                      borderRadius:
-                                          BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Text(
                                       'Railway Staff',
                                       textAlign: TextAlign.center,
                                       style: TextStyle(
-                                        color: _isStaff
-                                            ? Colors.white
-                                            : const Color(0xFF212121),
+                                        color: _isStaff ? Colors.white : const Color(0xFF212121),
                                         fontWeight: FontWeight.bold,
                                         fontSize: 16,
                                       ),
@@ -298,10 +229,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ],
                           ),
                         ),
-
                         const SizedBox(height: 24),
-
-                        // Email OR Username
                         TextFormField(
                           controller: _emailController,
                           keyboardType: TextInputType.text,
@@ -309,24 +237,18 @@ class _LoginScreenState extends State<LoginScreen> {
                           decoration: InputDecoration(
                             labelText: 'Email or Username',
                             hintText: 'Enter your email or username',
-                            prefixIcon:
-                                const Icon(Icons.person_outline),
+                            prefixIcon: const Icon(Icons.person_outline),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           validator: (value) {
                             final identifier = value?.trim() ?? '';
-
                             if (identifier.isEmpty) {
                               return 'Please enter your email or username';
                             }
-
                             if (identifier.contains('@')) {
-                              final emailRegex = RegExp(
-                                r'^[^@\s]+@[^@\s]+\.[^@\s]+$',
-                              );
-
+                              final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
                               if (!emailRegex.hasMatch(identifier)) {
                                 return 'Please enter a valid email address';
                               }
@@ -334,44 +256,30 @@ class _LoginScreenState extends State<LoginScreen> {
                               if (identifier.length < 3) {
                                 return 'Username must be at least 3 characters';
                               }
-
-                              if (!RegExp(
-                                r'^[a-zA-Z0-9_]+$',
-                              ).hasMatch(identifier)) {
+                              if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(identifier)) {
                                 return 'Username can only contain letters, numbers and _';
                               }
                             }
-
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 16),
-
-                        // Password
                         TextFormField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
                           textInputAction: TextInputAction.done,
                           onFieldSubmitted: (_) {
-                            if (!isLoading) {
-                              _handleLogin();
-                            }
+                            if (!isLoading) _handleLogin();
                           },
                           decoration: InputDecoration(
                             labelText: 'Password',
                             prefixIcon: const Icon(Icons.lock),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword
-                                    ? Icons.visibility
-                                    : Icons.visibility_off,
+                                _obscurePassword ? Icons.visibility : Icons.visibility_off,
                               ),
                               onPressed: () {
-                                setState(() {
-                                  _obscurePassword =
-                                      !_obscurePassword;
-                                });
+                                setState(() => _obscurePassword = !_obscurePassword);
                               },
                             ),
                             border: OutlineInputBorder(
@@ -382,22 +290,16 @@ class _LoginScreenState extends State<LoginScreen> {
                             if (value == null || value.isEmpty) {
                               return 'Please enter your password';
                             }
-
                             return null;
                           },
                         ),
-
                         const SizedBox(height: 24),
-
-                        // Login Button
                         ElevatedButton(
                           onPressed: isLoading ? null : _handleLogin,
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryColor,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 16,
-                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -408,35 +310,21 @@ class _LoginScreenState extends State<LoginScreen> {
                                   width: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2.5,
-                                    valueColor:
-                                        AlwaysStoppedAnimation<Color>(
-                                      Colors.white,
-                                    ),
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 )
                               : const Text(
                                   'Login Securely',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                                 ),
                         ),
-
                         const SizedBox(height: 16),
-
-                        // Google Sign-In
                         SizedBox(
                           width: double.infinity,
                           height: 52,
                           child: OutlinedButton.icon(
-                            onPressed:
-                                isLoading ? null : _handleGoogleSignIn,
-                            icon: Icon(
-                              Icons.account_circle,
-                              size: 26,
-                              color: primaryColor,
-                            ),
+                            onPressed: isLoading ? null : _handleGoogleSignIn,
+                            icon: Icon(Icons.account_circle, size: 26, color: primaryColor),
                             label: Text(
                               'Continue with Google',
                               style: TextStyle(
@@ -447,43 +335,14 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: primaryColor,
-                              side: BorderSide(
-                                color: primaryColor,
-                                width: 1.5,
-                              ),
+                              side: BorderSide(color: primaryColor, width: 1.5),
                               shape: RoundedRectangleBorder(
-                                borderRadius:
-                                    BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                           ),
                         ),
-
-                        const SizedBox(height: 16),
-
-                        // Sign Up
-                        TextButton(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  Navigator.of(context).push(
-                                    MaterialPageRoute(
-                                      builder: (_) =>
-                                          const SignupScreen(),
-                                    ),
-                                  );
-                                },
-                          child: const Text(
-                            "Don't have an account? Sign Up",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-
                         const SizedBox(height: 8),
-
                       ],
                     ),
                   ),
