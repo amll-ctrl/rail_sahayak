@@ -37,38 +37,27 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
   Future<void> _sendOtp() async {
     final phone = _phoneController.text.trim();
     if (!RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid 10-digit phone number.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Enter a valid 10-digit phone number.')));
       return;
     }
-
     final ok = await context.read<RequestProvider>().sendPhoneOtp(phone);
     if (!mounted) return;
     if (ok) {
       setState(() => _otpSent = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('OTP sent to your phone.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('OTP sent to your phone.')));
     } else {
-      final error = context.read<RequestProvider>().phoneVerificationError ??
-          'Could not send OTP. Please try again.';
+      final error = context.read<RequestProvider>().phoneVerificationError ?? 'Could not send OTP. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
     }
   }
 
   Future<void> _verifyOtp() async {
-    final ok = await context.read<RequestProvider>().verifyPhoneOtp(
-          _otpController.text.trim(),
-        );
+    final ok = await context.read<RequestProvider>().verifyPhoneOtp(_otpController.text.trim());
     if (!mounted) return;
     if (ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Phone number verified.')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Phone number verified.')));
     } else {
-      final error = context.read<RequestProvider>().phoneVerificationError ??
-          'Incorrect OTP. Please try again.';
+      final error = context.read<RequestProvider>().phoneVerificationError ?? 'Incorrect OTP. Please try again.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
     }
   }
@@ -81,8 +70,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         );
     if (!mounted) return;
     if (!ok) {
-      final error = context.read<RequestProvider>().phoneVerificationError ??
-          'Complete phone verification before continuing.';
+      final error = context.read<RequestProvider>().phoneVerificationError ?? 'Complete phone verification before continuing.';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
     }
   }
@@ -92,6 +80,12 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
     final provider = context.watch<RequestProvider>();
     final user = provider.currentUser;
     final primary = Colors.orange.shade800;
+    final displayName = (user?.name.trim().isNotEmpty ?? false)
+        ? user!.name.trim()
+        : (provider.pendingGoogleName.trim().isNotEmpty ? provider.pendingGoogleName.trim() : 'Google Account');
+    final displayEmail = (user?.email.trim().isNotEmpty ?? false)
+        ? user!.email.trim()
+        : provider.pendingGoogleEmail.trim();
 
     return Scaffold(
       appBar: AppBar(
@@ -122,28 +116,19 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                     children: [
                       const Icon(Icons.person_outline, size: 64),
                       const SizedBox(height: 16),
-                      const Text('Almost there!', textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
+                      const Text('Almost there!', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      if (user != null) ...[
-                        Text(user.name, textAlign: TextAlign.center,
-                            style: const TextStyle(fontWeight: FontWeight.w600)),
-                        Text(user.email, textAlign: TextAlign.center),
-                        const SizedBox(height: 24),
-                      ],
+                      Text(displayName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18)),
+                      if (displayEmail.isNotEmpty) Text(displayEmail, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 24),
                       TextFormField(
                         controller: _usernameController,
                         enabled: !provider.isLoading,
-                        decoration: const InputDecoration(
-                          labelText: 'Username',
-                          border: OutlineInputBorder(),
-                        ),
+                        decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder()),
                         validator: (value) {
                           final username = value?.trim() ?? '';
                           if (username.length < 3) return 'Username must be at least 3 characters.';
-                          if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(username)) {
-                            return 'Use only letters, numbers and _';
-                          }
+                          if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(username)) return 'Use only letters, numbers and _';
                           return null;
                         },
                       ),
@@ -157,11 +142,9 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                           border: const OutlineInputBorder(),
                           suffixIcon: provider.phoneVerified
                               ? const Icon(Icons.verified, color: Colors.green)
-                              : TextButton(onPressed: provider.phoneVerificationInProgress ? null : _sendOtp,
-                                  child: const Text('SEND OTP')),
+                              : TextButton(onPressed: provider.phoneVerificationInProgress ? null : _sendOtp, child: const Text('SEND OTP')),
                         ),
-                        validator: (value) => RegExp(r'^[0-9]{10}$').hasMatch(value?.trim() ?? '')
-                            ? null : 'Enter a valid 10-digit phone number.',
+                        validator: (value) => RegExp(r'^[0-9]{10}$').hasMatch(value?.trim() ?? '') ? null : 'Enter a valid 10-digit phone number.',
                       ),
                       if (_otpSent && !provider.phoneVerified) ...[
                         const SizedBox(height: 16),
@@ -172,8 +155,7 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                           decoration: InputDecoration(
                             labelText: '6-digit OTP',
                             border: const OutlineInputBorder(),
-                            suffixIcon: TextButton(onPressed: provider.phoneVerificationInProgress ? null : _verifyOtp,
-                                child: const Text('VERIFY')),
+                            suffixIcon: TextButton(onPressed: provider.phoneVerificationInProgress ? null : _verifyOtp, child: const Text('VERIFY')),
                           ),
                         ),
                       ],
@@ -182,13 +164,8 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
                         height: 52,
                         child: ElevatedButton(
                           onPressed: provider.isLoading ? null : _complete,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primary,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: provider.isLoading
-                              ? const CircularProgressIndicator(color: Colors.white)
-                              : const Text('Complete Profile'),
+                          style: ElevatedButton.styleFrom(backgroundColor: primary, foregroundColor: Colors.white),
+                          child: provider.isLoading ? const CircularProgressIndicator(color: Colors.white) : const Text('Complete Profile'),
                         ),
                       ),
                     ],
