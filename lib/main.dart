@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'models/user_profile.dart';
 import 'providers/request_provider.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/profile_completion_screen.dart';
 import 'screens/passenger/passenger_home.dart';
 import 'screens/staff/staff_dashboard.dart';
 import 'services/notification_service.dart';
@@ -100,11 +101,8 @@ class _RailSahayakBootstrapState extends State<RailSahayakBootstrap> {
                 children: [
                   const Icon(Icons.error_outline, size: 56, color: Colors.red),
                   const SizedBox(height: 16),
-                  const Text(
-                    'RailSahayak could not start',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
+                  const Text('RailSahayak could not start', textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   const Text('Please try again.', textAlign: TextAlign.center),
                   const SizedBox(height: 20),
@@ -122,10 +120,7 @@ class _RailSahayakBootstrapState extends State<RailSahayakBootstrap> {
     }
 
     if (!_servicesReady) {
-      return const MaterialApp(
-        debugShowCheckedModeBanner: false,
-        home: AppSplash(),
-      );
+      return const MaterialApp(debugShowCheckedModeBanner: false, home: AppSplash());
     }
 
     return ChangeNotifierProvider(
@@ -176,31 +171,16 @@ class _MyAppState extends State<MyApp> {
           primary: Colors.orange.shade800,
           secondary: Colors.indigo.shade800,
         ),
-        textTheme: const TextTheme(
-          titleLarge: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-          bodyLarge: TextStyle(fontSize: 16, height: 1.4),
-          bodyMedium: TextStyle(fontSize: 14, height: 1.3),
-        ),
-        cardTheme: const CardThemeData(
-          elevation: 2,
-          margin: EdgeInsets.symmetric(vertical: 6),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.all(Radius.circular(12)),
-          ),
-        ),
       ),
       home: (_keepSplash || !provider.isSessionInitialized)
           ? const AppSplash()
-          : _getHomeRoute(
-              provider.currentUser,
-              provider.needsProfileCompletion,
-            ),
+          : _getHomeRoute(provider.currentUser, provider.needsProfileCompletion),
     );
   }
 
   Widget _getHomeRoute(UserProfile? user, bool needsProfileCompletion) {
     if (user == null) return const LoginScreen();
-    if (needsProfileCompletion) return ProfileCompletionScreen();
+    if (needsProfileCompletion) return const ProfileCompletionScreen();
     if (user.role == UserRole.staff) return const StaffDashboard();
     return const PassengerHome();
   }
