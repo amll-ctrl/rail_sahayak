@@ -167,8 +167,18 @@ class _MyAppState extends State<MyApp> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<RequestProvider>();
+    final user = provider.currentUser;
+    final needsProfileCompletion = provider.needsProfileCompletion;
+
+    // Changing the MaterialApp key when authentication changes recreates the
+    // Navigator. This is important because changing only `home` can leave the
+    // old dashboard route visible in an existing Navigator after sign-out.
+    final sessionKey = user == null
+        ? 'signed_out'
+        : '${user.id}:${user.role.name}:${needsProfileCompletion ? 'profile' : 'home'}';
 
     return MaterialApp(
+      key: ValueKey(sessionKey),
       title: 'RailSahayak Accessibility Helper',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -181,10 +191,7 @@ class _MyAppState extends State<MyApp> {
       ),
       home: (_keepSplash || !provider.isSessionInitialized)
           ? const AppSplash()
-          : _getHomeRoute(
-              provider.currentUser,
-              provider.needsProfileCompletion,
-            ),
+          : _getHomeRoute(user, needsProfileCompletion),
     );
   }
 
