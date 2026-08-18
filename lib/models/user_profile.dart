@@ -1,4 +1,4 @@
-enum UserRole { passenger, staff }
+enum UserRole { passenger, staff, admin }
 
 class UserProfile {
   final String id;
@@ -7,8 +7,8 @@ class UserProfile {
   final String email;
   final String phone;
   final UserRole role;
-  final String? disabilityType; // For passenger (e.g. Wheelchair, Visually Impaired, Elderly)
-  final String? preferredAssistance; // Specific needs details
+  final String? disabilityType;
+  final String? preferredAssistance;
 
   UserProfile({
     required this.id,
@@ -21,30 +21,41 @@ class UserProfile {
     this.preferredAssistance,
   });
 
-  // Convert Firestore Document to UserProfile object
   factory UserProfile.fromMap(Map<String, dynamic> map, String docId) {
-  return UserProfile(
-    id: docId,
-    name: map['name'] ?? '',
-    username: map['username'] ?? '',
-    email: map['email'] ?? '',
-    phone: map['phone'] ?? '',
-    role: (map['role'] == 'staff')
-        ? UserRole.staff
-        : UserRole.passenger,
-    disabilityType: map['disabilityType'],
-    preferredAssistance: map['preferredAssistance'],
-  );
-}
+    return UserProfile(
+      id: docId,
+      name: (map['name'] ?? '').toString(),
+      username: (map['username'] ?? '').toString(),
+      email: (map['email'] ?? '').toString(),
+      phone: (map['phone'] ?? '').toString(),
+      role: _roleFromString(map['role']),
+      disabilityType: map['disabilityType'],
+      preferredAssistance: map['preferredAssistance'],
+    );
+  }
 
-  // Convert UserProfile to Map for Firestore
+  static UserRole _roleFromString(dynamic value) {
+    switch (value?.toString().toLowerCase()) {
+      case 'admin':
+        return UserRole.admin;
+      case 'staff':
+        return UserRole.staff;
+      default:
+        return UserRole.passenger;
+    }
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'name': name,
       'username': username,
       'email': email,
       'phone': phone,
-      'role': role == UserRole.staff ? 'staff' : 'passenger',
+      'role': switch (role) {
+        UserRole.admin => 'admin',
+        UserRole.staff => 'staff',
+        UserRole.passenger => 'passenger',
+      },
       'disabilityType': disabilityType,
       'preferredAssistance': preferredAssistance,
     };
