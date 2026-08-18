@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../providers/request_provider.dart';
+import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -30,40 +32,30 @@ class _LoginScreenState extends State<LoginScreen> {
     FocusScope.of(context).unfocus();
     final provider = context.read<RequestProvider>();
 
-    try {
-      final success = await provider.login(
-        _emailController.text.trim(),
-        _passwordController.text,
-        _isStaff,
+    final success = await provider.login(
+      _emailController.text.trim(),
+      _passwordController.text,
+      _isStaff,
+    );
+
+    if (!mounted) return;
+    if (success) {
+      final user = provider.currentUser;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            user?.role.name == 'admin'
+                ? 'Welcome to RailSahayak Admin'
+                : 'Logged in as ${user?.name ?? 'User'}',
+          ),
+          backgroundColor: Colors.green.shade700,
+        ),
       );
-
-      if (!mounted) return;
-
-      if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'Logged in as ${provider.currentUser?.name ?? 'User'}',
-            ),
-            backgroundColor: Colors.green.shade700,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Incorrect username/email or password.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 3),
-          ),
-        );
-      }
-    } catch (_) {
-      if (!mounted) return;
+    } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Incorrect username/email or password.'),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
         ),
       );
     }
@@ -72,17 +64,12 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _handleGoogleSignIn() async {
     FocusScope.of(context).unfocus();
     final provider = context.read<RequestProvider>();
-
-    final success = await provider.signInWithGoogle(
-      isStaff: _isStaff,
-    );
+    final success = await provider.signInWithGoogle(isStaff: _isStaff);
 
     if (!mounted) return;
-
     if (success) {
       final user = provider.currentUser;
       final needsProfile = provider.needsProfileCompletion;
-
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -91,7 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
                 : 'Welcome ${user?.name ?? 'User'}!',
           ),
           backgroundColor: Colors.green.shade700,
-          duration: const Duration(seconds: 3),
         ),
       );
     } else {
@@ -99,7 +85,6 @@ class _LoginScreenState extends State<LoginScreen> {
         const SnackBar(
           content: Text('Google sign-in failed. Please try again.'),
           backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
         ),
       );
     }
@@ -122,229 +107,241 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 450),
-              child: Card(
-                elevation: 4,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 450),
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(width: 30, height: 6, color: Colors.orange),
+                          Container(width: 30, height: 6, color: Colors.white),
+                          Container(width: 30, height: 6, color: Colors.green),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'RailSahayak',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.w800,
+                          color: primaryColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        'Indian Railways Boarding Assistance App',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                      const SizedBox(height: 24),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
                           children: [
-                            Container(width: 30, height: 6, color: Colors.orange),
-                            Container(width: 30, height: 6, color: Colors.white),
-                            Container(width: 30, height: 6, color: Colors.green),
+                            Expanded(
+                              child: InkWell(
+                                onTap: isLoading
+                                    ? null
+                                    : () => setState(() => _isStaff = false),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: !_isStaff
+                                        ? Colors.orange.shade800
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'Passenger',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: !_isStaff
+                                          ? Colors.white
+                                          : const Color(0xFF212121),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: InkWell(
+                                onTap: isLoading
+                                    ? null
+                                    : () => setState(() => _isStaff = true),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  decoration: BoxDecoration(
+                                    color: _isStaff
+                                        ? Colors.indigo.shade800
+                                        : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Text(
+                                    'Railway Staff',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      color: _isStaff
+                                          ? Colors.white
+                                          : const Color(0xFF212121),
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'RailSahayak',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w800,
-                            color: primaryColor,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        const Text(
-                          'Indian Railways Boarding Assistance App',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        Container(
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
+                      ),
+                      const SizedBox(height: 24),
+                      TextFormField(
+                        controller: _emailController,
+                        keyboardType: TextInputType.text,
+                        textInputAction: TextInputAction.next,
+                        decoration: InputDecoration(
+                          labelText: 'Email or Username',
+                          hintText: 'Enter your email or username',
+                          prefixIcon: const Icon(Icons.person_outline),
+                          border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: InkWell(
-                                  onTap: isLoading ? null : () {
-                                    setState(() => _isStaff = false);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: !_isStaff
-                                          ? Colors.orange.shade800
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      'Passenger',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: !_isStaff ? Colors.white : const Color(0xFF212121),
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ),
+                        ),
+                        validator: (value) {
+                          final identifier = value?.trim() ?? '';
+                          if (identifier.isEmpty) {
+                            return 'Please enter your email or username';
+                          }
+                          if (identifier.contains('@') &&
+                              !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
+                                  .hasMatch(identifier)) {
+                            return 'Please enter a valid email address';
+                          }
+                          if (!identifier.contains('@') && identifier.length < 3) {
+                            return 'Username must be at least 3 characters';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _passwordController,
+                        obscureText: _obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onFieldSubmitted: (_) {
+                          if (!isLoading) _handleLogin();
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Password',
+                          prefixIcon: const Icon(Icons.lock),
+                          suffixIcon: IconButton(
+                            icon: Icon(_obscurePassword
+                                ? Icons.visibility
+                                : Icons.visibility_off),
+                            onPressed: () => setState(
+                              () => _obscurePassword = !_obscurePassword,
+                            ),
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Please enter your password'
+                            : null,
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: isLoading ? null : _handleLogin,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Login Securely',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                              Expanded(
-                                child: InkWell(
-                                  onTap: isLoading ? null : () {
-                                    setState(() => _isStaff = true);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: _isStaff
-                                          ? Colors.indigo.shade800
-                                          : Colors.transparent,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Text(
-                                      'Railway Staff',
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        color: _isStaff ? Colors.white : const Color(0xFF212121),
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                      ),
+                      const SizedBox(height: 16),
+                      OutlinedButton.icon(
+                        onPressed: isLoading ? null : _handleGoogleSignIn,
+                        icon: Icon(Icons.account_circle,
+                            color: primaryColor, size: 26),
+                        label: Text('Continue with Google',
+                            style: TextStyle(color: primaryColor)),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: BorderSide(color: primaryColor),
                         ),
-                        const SizedBox(height: 24),
-                        TextFormField(
-                          controller: _emailController,
-                          keyboardType: TextInputType.text,
-                          textInputAction: TextInputAction.next,
-                          decoration: InputDecoration(
-                            labelText: 'Email or Username',
-                            hintText: 'Enter your email or username',
-                            prefixIcon: const Icon(Icons.person_outline),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                      ),
+                      if (!_isStaff) ...[
+                        const SizedBox(height: 18),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            const Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 12),
+                              child: Text('New to RailSahayak?'),
                             ),
-                          ),
-                          validator: (value) {
-                            final identifier = value?.trim() ?? '';
-                            if (identifier.isEmpty) {
-                              return 'Please enter your email or username';
-                            }
-                            if (identifier.contains('@')) {
-                              final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                              if (!emailRegex.hasMatch(identifier)) {
-                                return 'Please enter a valid email address';
-                              }
-                            } else {
-                              if (identifier.length < 3) {
-                                return 'Username must be at least 3 characters';
-                              }
-                              if (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(identifier)) {
-                                return 'Username can only contain letters, numbers and _';
-                              }
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        TextFormField(
-                          controller: _passwordController,
-                          obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.done,
-                          onFieldSubmitted: (_) {
-                            if (!isLoading) _handleLogin();
-                          },
-                          decoration: InputDecoration(
-                            labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock),
-                            suffixIcon: IconButton(
-                              icon: Icon(
-                                _obscurePassword ? Icons.visibility : Icons.visibility_off,
-                              ),
-                              onPressed: () {
-                                setState(() => _obscurePassword = !_obscurePassword);
-                              },
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your password';
-                            }
-                            return null;
-                          },
-                        ),
-                        const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: isLoading ? null : _handleLogin,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2.5,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                  ),
-                                )
-                              : const Text(
-                                  'Login Securely',
-                                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                        ),
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: OutlinedButton.icon(
-                            onPressed: isLoading ? null : _handleGoogleSignIn,
-                            icon: Icon(Icons.account_circle, size: 26, color: primaryColor),
-                            label: Text(
-                              'Continue with Google',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: primaryColor,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: primaryColor,
-                              side: BorderSide(color: primaryColor, width: 1.5),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                          ],
                         ),
                         const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: isLoading
+                              ? null
+                              : () => Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) => const SignupScreen(),
+                                    ),
+                                  ),
+                          icon: const Icon(Icons.person_add_alt_1),
+                          label: const Text(
+                            'Create Passenger Account',
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ] else ...[
+                        const SizedBox(height: 14),
+                        const Text(
+                          'Staff accounts are created and approved separately by an administrator.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 12, color: Colors.grey),
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),
