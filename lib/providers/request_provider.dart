@@ -32,6 +32,9 @@ class RequestProvider extends ChangeNotifier {
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>?
       _requestsSubscription;
 
+  final List<UserProfile> _adminStaffCandidates = [];
+  bool _adminDataLoading = false;
+
   RequestProvider() {
     _restoreSession();
   }
@@ -47,6 +50,9 @@ class RequestProvider extends ChangeNotifier {
   String get pendingGoogleName => _pendingGoogleName ?? '';
   String get pendingGoogleEmail => _pendingGoogleEmail ?? '';
   List<AssistanceRequest> get requests => List.unmodifiable(_requests);
+  List<UserProfile> get adminStaffCandidates =>
+      List.unmodifiable(_adminStaffCandidates);
+  bool get isAdminDataLoading => _adminDataLoading;
 
   List<AssistanceRequest> get passengerRequests {
     if (_currentUser == null) return [];
@@ -94,9 +100,7 @@ class RequestProvider extends ChangeNotifier {
           username: (data['username'] ?? '').toString(),
           email: restoredEmail,
           phone: (data['phone'] ?? '').toString(),
-          role: (data['role'] ?? 'passenger').toString().toLowerCase() == 'staff'
-              ? UserRole.staff
-              : UserRole.passenger,
+          role: UserProfile.fromMap(data, refreshedUser.uid).role,
           disabilityType: data['disabilityType'],
           preferredAssistance: data['preferredAssistance'],
         );
@@ -111,7 +115,11 @@ class RequestProvider extends ChangeNotifier {
         }
 
         _needsProfileCompletion = _isProfileIncomplete(_currentUser!);
-        if (!_needsProfileCompletion) {
+        if (_currentUser!.role == UserRole.admin) {
+          _needsProfileCompletion = false;
+          await _startRequestListener();
+          await refreshAdminData();
+        } else if (!_needsProfileCompletion) {
           await _startRequestListener();
         } else {
           await _stopRequestListener();
@@ -161,6 +169,7 @@ class RequestProvider extends ChangeNotifier {
   }
 
   bool _isProfileIncomplete(UserProfile user) {
+    if (user.role == UserRole.admin) return false;
     return user.username.trim().isEmpty || user.phone.trim().isEmpty;
   }
 
@@ -181,8 +190,7 @@ class RequestProvider extends ChangeNotifier {
             .limit(1)
             .get();
         if (usernameQuery.docs.isEmpty) return false;
-        final userData = usernameQuery.docs.first.data();
-        final storedEmail = userData['email'];
+        final storedEmail = usernameQuery.docs.first.data()['email'];
         if (storedEmail == null || storedEmail.toString().trim().isEmpty) {
           return false;
         }
@@ -206,34 +214,27 @@ class RequestProvider extends ChangeNotifier {
       }
 
       final profileData = profileDoc.data()!;
-      final roleString =
-          (profileData['role'] ?? 'passenger').toString().toLowerCase();
-      final userRole = roleString == 'staff'
-          ? UserRole.staff
-          : UserRole.passenger;
+      final profileUser = UserProfile.fromMap(profileData, firebaseUser.uid);
 
-      if (isStaff && userRole != UserRole.staff) {
+      if (profileUser.role == UserRole.admin) {
+        _currentUser = profileUser;
+        _needsProfileCompletion = false;
+        _clearPendingGoogleProfile();
+        await _startRequestListener();
+        await refreshAdminData();
+        return true;
+      }
+
+      if (isStaff && profileUser.role != UserRole.staff) {
         await _auth.signOut();
         return false;
       }
-      if (!isStaff && userRole != UserRole.passenger) {
+      if (!isStaff && profileUser.role != UserRole.passenger) {
         await _auth.signOut();
         return false;
       }
 
-      _currentUser = UserProfile(
-        id: firebaseUser.uid,
-        name: profileData['name'] ??
-            firebaseUser.displayName ??
-            'RailSahayak User',
-        username: profileData['username'] ?? '',
-        email: profileData['email'] ?? firebaseUser.email ?? email,
-        phone: profileData['phone'] ?? '',
-        role: userRole,
-        disabilityType: profileData['disabilityType'],
-        preferredAssistance: profileData['preferredAssistance'],
-      );
-
+      _currentUser = profileUser;
       _needsProfileCompletion = false;
       _clearPendingGoogleProfile();
       await _startRequestListener();
@@ -271,27 +272,21 @@ class RequestProvider extends ChangeNotifier {
       final profileDoc = await profileRef.get();
 
       if (profileDoc.exists && profileDoc.data() != null) {
-        final profileData = profileDoc.data()!;
-        final roleString =
-            (profileData['role'] ?? 'passenger').toString().toLowerCase();
-        final storedRole = roleString == 'staff'
-            ? UserRole.staff
-            : UserRole.passenger;
-
-        final profileUser = UserProfile(
-          id: firebaseUser.uid,
-          name: profileData['name'] ??
-              firebaseUser.displayName ??
-              'RailSahayak User',
-          username: profileData['username'] ?? '',
-          email: profileData['email'] ??
-              firebaseUser.email ??
-              googleUser.email,
-          phone: profileData['phone'] ?? '',
-          role: storedRole,
-          disabilityType: profileData['disabilityType'],
-          preferredAssistance: profileData['preferredAssistance'],
+        final profileUser = UserProfile.fromMap(
+          profileDoc.data()!,
+          firebaseUser.uid,
         );
+
+        if (profileUser.role == UserRole.admin) {
+          _currentUser = profileUser;
+          _needsProfileCompletion = false;
+          _pendingGoogleUser = firebaseUser;
+          _pendingGoogleEmail = profileUser.email;
+          _pendingGoogleName = profileUser.name;
+          await _startRequestListener();
+          await refreshAdminData();
+          return true;
+        }
 
         final profileIncomplete = _isProfileIncomplete(profileUser);
         if (profileIncomplete) {
@@ -308,7 +303,7 @@ class RequestProvider extends ChangeNotifier {
         } else {
           final selectedRole =
               isStaff ? UserRole.staff : UserRole.passenger;
-          if (selectedRole != storedRole) {
+          if (selectedRole != profileUser.role) {
             await _auth.signOut();
             await _googleSignIn.signOut();
             _currentUser = null;
@@ -344,7 +339,6 @@ class RequestProvider extends ChangeNotifier {
         phone: '',
         role: isStaff ? UserRole.staff : UserRole.passenger,
       );
-
       _pendingGoogleUser = firebaseUser;
       _pendingGoogleEmail = email;
       _pendingGoogleName = displayName;
@@ -515,8 +509,7 @@ class RequestProvider extends ChangeNotifier {
       return true;
     } on FirebaseAuthException catch (e) {
       _phoneVerificationInProgress = false;
-      _phoneVerificationError =
-          e.message ?? 'Could not verify the OTP.';
+      _phoneVerificationError = e.message ?? 'Could not verify the OTP.';
       if (e.code == 'provider-already-linked') {
         _phoneVerified = true;
         _phoneVerificationError = null;
@@ -530,6 +523,11 @@ class RequestProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  void clearPhoneVerificationError() {
+    _phoneVerificationError = null;
+    notifyListeners();
   }
 
   Future<bool> signup({
@@ -570,9 +568,7 @@ class RequestProvider extends ChangeNotifier {
           .where('username', isEqualTo: cleanUsername)
           .limit(1)
           .get();
-      if (usernameCheck.docs.isNotEmpty) {
-        return false;
-      }
+      if (usernameCheck.docs.isNotEmpty) return false;
 
       final credential = await _auth.createUserWithEmailAndPassword(
         email: cleanEmail,
@@ -582,7 +578,6 @@ class RequestProvider extends ChangeNotifier {
       if (firebaseUser == null) return false;
 
       await firebaseUser.updateDisplayName(cleanName);
-
       final newUser = UserProfile(
         id: firebaseUser.uid,
         name: cleanName,
@@ -598,7 +593,6 @@ class RequestProvider extends ChangeNotifier {
           .collection('users')
           .doc(firebaseUser.uid)
           .set(newUser.toMap());
-
       _currentUser = newUser;
       _needsProfileCompletion = true;
       _resetPhoneVerificationState();
@@ -625,7 +619,6 @@ class RequestProvider extends ChangeNotifier {
 
     final cleanUsername = username.trim().toLowerCase();
     final cleanPhone = phone.replaceAll(RegExp(r'[\s-]'), '');
-
     if (cleanUsername.length < 3 ||
         !RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(cleanUsername) ||
         !RegExp(r'^[0-9]{10}$').hasMatch(cleanPhone)) {
@@ -665,11 +658,10 @@ class RequestProvider extends ChangeNotifier {
         preferredAssistance: user.preferredAssistance,
       );
 
-      await _firestore.collection('users').doc(firebaseUser.uid).set(
-        updatedUser.toMap(),
-        SetOptions(merge: true),
-      );
-
+      await _firestore
+          .collection('users')
+          .doc(firebaseUser.uid)
+          .set(updatedUser.toMap(), SetOptions(merge: true));
       _currentUser = updatedUser;
       _needsProfileCompletion = false;
       _clearPendingGoogleProfile();
@@ -690,6 +682,7 @@ class RequestProvider extends ChangeNotifier {
 
   Future<void> logout() async {
     await _stopRequestListener();
+    _adminStaffCandidates.clear();
     _currentUser = null;
     _needsProfileCompletion = false;
     _clearPendingGoogleProfile();
@@ -714,19 +707,68 @@ class RequestProvider extends ChangeNotifier {
     _pendingGoogleName = null;
   }
 
+  Future<void> refreshAdminData() async {
+    if (_currentUser?.role != UserRole.admin) return;
+    _adminDataLoading = true;
+    notifyListeners();
+
+    try {
+      final snapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'staff_pending')
+          .get();
+
+      _adminStaffCandidates
+        ..clear()
+        ..addAll(snapshot.docs.map(
+          (doc) => UserProfile.fromMap(doc.data(), doc.id),
+        ));
+    } catch (e) {
+      debugPrint('Admin staff query error: $e');
+      _adminStaffCandidates.clear();
+    } finally {
+      _adminDataLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> approveStaff(String userId) async {
+    if (_currentUser?.role != UserRole.admin) return false;
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'role': 'staff',
+      });
+      await refreshAdminData();
+      return true;
+    } catch (e) {
+      debugPrint('Approve staff error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> rejectStaff(String userId) async {
+    if (_currentUser?.role != UserRole.admin) return false;
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'role': 'rejected',
+      });
+      await refreshAdminData();
+      return true;
+    } catch (e) {
+      debugPrint('Reject staff error: $e');
+      return false;
+    }
+  }
+
   Future<void> _startRequestListener() async {
     await _requestsSubscription?.cancel();
     _requestsSubscription = null;
     _requests.clear();
 
     final user = _currentUser;
-    if (user == null) {
-      notifyListeners();
-      return;
-    }
+    if (user == null) return;
 
-    Query<Map<String, dynamic>> query =
-        _firestore.collection('requests');
+    Query<Map<String, dynamic>> query = _firestore.collection('requests');
     if (user.role == UserRole.passenger) {
       query = query.where('passengerId', isEqualTo: user.id);
     }
@@ -762,7 +804,6 @@ class RequestProvider extends ChangeNotifier {
     String? notes,
   }) async {
     if (_currentUser == null) return false;
-
     _isLoading = true;
     notifyListeners();
 
@@ -799,7 +840,6 @@ class RequestProvider extends ChangeNotifier {
   }) async {
     _isLoading = true;
     notifyListeners();
-
     try {
       final data = <String, dynamic>{'status': newStatus};
       if (staffId != null) data['staffId'] = staffId;
