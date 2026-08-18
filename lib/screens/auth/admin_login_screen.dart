@@ -36,8 +36,10 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       final email = _emailController.text.trim().toLowerCase();
       final password = _passwordController.text;
 
-      final credential = await FirebaseAuth.instance
-          .signInWithEmailAndPassword(email: email, password: password);
+      final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
       final firebaseUser = credential.user;
       if (firebaseUser == null) {
         throw FirebaseAuthException(
@@ -60,8 +62,11 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
       }
 
       final data = adminDoc.data()!;
-      final role = (data['role'] ?? '').toString().toLowerCase();
-      final approved = data['approved'] == true;
+      final role = (data['role'] ?? '').toString().trim().toLowerCase();
+      // Accept both the intended Firestore boolean `true` and the older
+      // string value "true" so an existing admin document is not locked out.
+      final approved = data['approved'] == true ||
+          data['approved'].toString().trim().toLowerCase() == 'true';
 
       if (role != 'admin' || !approved) {
         await FirebaseAuth.instance.signOut();
@@ -71,8 +76,6 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
         );
       }
 
-      // The admin profile lives in `admin/{uid}`, so do not call the normal
-      // passenger login flow (which reads `users/{uid}`).
       final provider = context.read<RequestProvider>();
       await provider.setAdminSession(uid: firebaseUser.uid, data: data);
 
