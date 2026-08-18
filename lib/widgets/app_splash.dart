@@ -20,7 +20,7 @@ class _AppSplashState extends State<AppSplash>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 2400),
     )..forward();
 
     final curve = CurvedAnimation(
@@ -28,14 +28,46 @@ class _AppSplashState extends State<AppSplash>
       curve: Curves.easeOutCubic,
     );
 
-    _fade = Tween<double>(begin: 0, end: 1).animate(curve);
-    _scale = Tween<double>(begin: 0.82, end: 1).animate(curve);
+    _fade = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.32, curve: Curves.easeOut),
+      ),
+    );
+
+    _scale = Tween<double>(begin: 0.86, end: 1).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: const Interval(0.0, 0.42, curve: Curves.easeOutCubic),
+      ),
+    );
+
     _line = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.35, 1, curve: Curves.easeOutCubic),
+        curve: const Interval(0.32, 0.82, curve: Curves.easeInOutCubic),
       ),
     );
+
+    // Keep the animation alive after the first reveal instead of allowing the
+    // logo to disappear almost immediately while startup finishes.
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        Future<void>.delayed(const Duration(milliseconds: 350), () {
+          if (mounted) {
+            _controller.reverse();
+          }
+        });
+      }
+    });
+
+    // Forward the controller again after the reverse so AppSplash can be
+    // safely rebuilt on another startup without a stale animation state.
+    _controller.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed && mounted) {
+        _controller.forward();
+      }
+    });
   }
 
   @override
@@ -46,10 +78,11 @@ class _AppSplashState extends State<AppSplash>
 
   @override
   Widget build(BuildContext context) {
+    const background = Color(0xFFFAFAFA);
     final orange = Colors.orange.shade800;
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+      backgroundColor: background,
       body: Center(
         child: AnimatedBuilder(
           animation: _controller,
@@ -62,15 +95,15 @@ class _AppSplashState extends State<AppSplash>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 88,
-                      height: 88,
+                      width: 96,
+                      height: 96,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: orange.withValues(alpha: 0.10),
                       ),
                       child: Icon(
                         Icons.train_rounded,
-                        size: 48,
+                        size: 52,
                         color: orange,
                       ),
                     ),
