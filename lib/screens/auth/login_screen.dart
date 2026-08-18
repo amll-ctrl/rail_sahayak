@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../providers/request_provider.dart';
 import 'admin_login_screen.dart';
 import 'signup_screen.dart';
+import 'staff_registration_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -40,8 +41,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Incorrect email/username or password.'),
+        SnackBar(
+          content: Text(_isStaff
+              ? 'Staff login failed. Your Firebase account must exist and your approved staff record must be valid.'
+              : 'Incorrect email/username or password.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -56,8 +59,10 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!mounted) return;
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Google sign-in failed. Please try again.'),
+        SnackBar(
+          content: Text(_isStaff
+              ? 'Google staff login is only available for an already approved staff account.'
+              : 'Google sign-in failed. Please try again.'),
           backgroundColor: Colors.red,
         ),
       );
@@ -166,10 +171,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             controller: _identifierController,
                             enabled: !loading,
                             textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(labelText: 'Email or Username', prefixIcon: Icon(Icons.person_outline), border: OutlineInputBorder()),
+                            decoration: InputDecoration(labelText: _isStaff ? 'Company Email' : 'Email or Username', prefixIcon: const Icon(Icons.person_outline), border: const OutlineInputBorder()),
                             validator: (value) {
                               final v = value?.trim() ?? '';
-                              if (v.isEmpty) return 'Please enter your email or username';
+                              if (v.isEmpty) return _isStaff ? 'Please enter your company email' : 'Please enter your email or username';
                               if (v.contains('@') && !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v)) return 'Enter a valid email address';
                               return null;
                             },
@@ -212,7 +217,13 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                           ] else ...[
                             const SizedBox(height: 14),
-                            const Text('Staff accounts are created and approved separately by an administrator.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            const Text('Staff accounts must be approved by an administrator before they can sign in.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+                            const SizedBox(height: 8),
+                            OutlinedButton.icon(
+                              onPressed: loading ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StaffRegistrationScreen())),
+                              icon: const Icon(Icons.badge_outlined),
+                              label: const Text('Request Staff Access'),
+                            ),
                           ],
                         ],
                       ),
