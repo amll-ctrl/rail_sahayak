@@ -74,6 +74,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final loading = provider.isLoading;
     final primary = _isStaff ? Colors.indigo.shade800 : Colors.orange.shade800;
 
+    const adminAccent = Color(0xFFD32F2F);
+    const adminAccentLight = Color(0xFFFFEBEE);
+    const adminAccentBorder = Color(0xFFFFCDD2);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -100,9 +104,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.indigo.shade50,
+                        color: adminAccentLight,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.indigo.shade100),
+                        border: Border.all(color: adminAccentBorder),
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -113,7 +117,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                         child: const Row(
                           children: [
-                            Icon(Icons.admin_panel_settings, color: Color(0xFF283593), size: 30),
+                            Icon(Icons.admin_panel_settings, color: adminAccent, size: 30),
                             SizedBox(width: 12),
                             Expanded(
                               child: Column(
@@ -125,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ],
                               ),
                             ),
-                            Icon(Icons.chevron_right, color: Color(0xFF283593)),
+                            Icon(Icons.chevron_right, color: adminAccent),
                           ],
                         ),
                       ),
