@@ -30,7 +30,7 @@ extension PassengerSignup on RequestProvider {
     if (cleanName.isEmpty) return 'Please enter your full name.';
     if (cleanUsername.length < 3 ||
         !RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(cleanUsername)) {
-      return 'Username must contain only letters, numbers and _.';
+      return 'Username must be at least 3 characters and use only letters, numbers and _.';
     }
     if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(cleanEmail)) {
       return 'Please enter a valid email address.';
@@ -42,23 +42,34 @@ extension PassengerSignup on RequestProvider {
 
     final firestore = FirebaseFirestore.instance;
     final auth = FirebaseAuth.instance;
-    const timeout = Duration(seconds: 15);
+    const timeout = Duration(seconds: 20);
 
     try {
-      final existingUsername = await firestore
-          .collection('users')
-          .where('username', isEqualTo: cleanUsername)
-          .limit(1)
-          .get()
-          .timeout(timeout);
-      if (existingUsername.docs.isNotEmpty) {
-        return 'That username is already registered. Please choose another one.';
+      // A username lookup is helpful, but a Firestore read failure must not
+      // prevent Firebase Auth from creating a valid passenger account.
+      try {
+        final existingUsername = await firestore
+            .collection('users')
+            .where('username', isEqualTo: cleanUsername)
+            .limit(1)
+            .get()
+            .timeout(timeout);
+        if (existingUsername.docs.isNotEmpty) {
+          return 'That username is already registered. Please choose another one.';
+        }
+      } on FirebaseException catch (e) {
+        // Continue to the authenticated profile write below. This avoids a
+        // signup dead-end when Firestore rules permit creating one's own
+        // profile but do not permit querying every user document.
+        if (e.code != 'permission-denied') rethrow;
       }
 
-      final credential = await auth.createUserWithEmailAndPassword(
-        email: cleanEmail,
-        password: password,
-      ).timeout(timeout);
+      final credential = await auth
+          .createUserWithEmailAndPassword(
+            email: cleanEmail,
+            password: password,
+          )
+          .timeout(timeout);
       final firebaseUser = credential.user;
       if (firebaseUser == null) {
         return 'Firebase did not create the account. Please try again.';
@@ -66,16 +77,26 @@ extension PassengerSignup on RequestProvider {
 
       await firebaseUser.updateDisplayName(cleanName).timeout(timeout);
 
+      final profile = UserProfile(
+        id: firebaseUser.uid,
+        name: cleanName,
+        username: cleanUsername,
+        email: cleanEmail,
+        phone: cleanPhone,
+        role: UserRole.passenger,
+      );
+
       await firestore.collection('users').doc(firebaseUser.uid).set({
-        'name': cleanName,
-        'username': cleanUsername,
-        'email': cleanEmail,
-        'phone': cleanPhone,
+        ...profile.toMap(),
         'role': 'passenger',
         'disabilityType': null,
         'preferredAssistance': null,
       }, SetOptions(merge: true)).timeout(timeout);
 
+      // Keep Provider, Firebase Auth and the app router in the same session.
+      // Previously the account could be created successfully while the app
+      // continued waiting on an uninitialized provider session.
+      await completePassengerSignupSession(profile);
       return null;
     } on FirebaseAuthException catch (e) {
       switch (e.code) {
@@ -93,16 +114,10 @@ extension PassengerSignup on RequestProvider {
           return 'Could not create the account (${e.code}). Please try again.';
       }
     } on TimeoutException {
-      try {
-        await auth.currentUser?.delete();
-      } catch (_) {}
       return 'Firebase is taking too long to respond. Check your internet connection and try again.';
-    } catch (e) {
-      // If Firestore fails after Firebase Auth created the user, remove the
-      // partially-created Auth account so the email is not permanently stuck.
-      try {
-        await auth.currentUser?.delete();
-      } catch (_) {}
+    } on FirebaseException catch (e) {
+      return 'Your Firebase account was created, but the passenger profile could not be saved (${e.code}). Check your Firestore rules and try logging in again.';
+    } catch (_) {
       return 'The account could not be saved. Please try again.';
     }
   }
