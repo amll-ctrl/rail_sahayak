@@ -34,10 +34,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
     return Scaffold(
       backgroundColor: const Color(0xFFFFFBF8),
       appBar: AppBar(
-        title: const Text(
-          'Staff Support Console',
-          style: TextStyle(fontWeight: FontWeight.w500),
-        ),
+        title: const Text('Staff Support Console', style: TextStyle(fontWeight: FontWeight.w500)),
         backgroundColor: _blue,
         foregroundColor: Colors.white,
         elevation: 0,
@@ -50,9 +47,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
         ],
       ),
       body: RefreshIndicator(
-        onRefresh: () async {
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-        },
+        onRefresh: () async => Future<void>.delayed(const Duration(milliseconds: 250)),
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
@@ -63,19 +58,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Active Station Duty: $staffName',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 21,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
+                    Text('Active Station Duty: $staffName', style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w600)),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Assisting passengers with disabilities and boardings.',
-                      style: TextStyle(color: Colors.white70, fontSize: 15),
-                    ),
+                    const Text('Assisting passengers with disabilities and boardings.', style: TextStyle(color: Colors.white70, fontSize: 15)),
                   ],
                 ),
               ),
@@ -100,15 +85,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(28),
-                  child: Card(
-                    color: _surface,
-                    child: Padding(
-                      padding: EdgeInsets.all(28),
-                      child: Center(
-                        child: Text('No assistance requests in this category.'),
-                      ),
-                    ),
-                  ),
+                  child: Card(color: _surface, child: Padding(padding: EdgeInsets.all(28), child: Center(child: Text('No assistance requests in this category.')))),
                 ),
               )
             else
@@ -116,11 +93,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                 padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
-                    (context, index) => _requestCard(
-                      context,
-                      requests[index],
-                      currentStaff,
-                    ),
+                    (context, index) => _requestCard(context, requests[index], currentStaff),
                     childCount: requests.length,
                   ),
                 ),
@@ -142,41 +115,26 @@ class _StaffDashboardState extends State<StaffDashboard> {
         style: OutlinedButton.styleFrom(
           backgroundColor: selected ? _blue : const Color(0xFFF5F0EC),
           foregroundColor: selected ? Colors.white : Colors.black87,
-          side: BorderSide(
-            color: selected ? _blue : const Color(0xFFD8CEC7),
-            width: 1.4,
-          ),
+          side: BorderSide(color: selected ? _blue : const Color(0xFFD8CEC7), width: 1.4),
           padding: const EdgeInsets.symmetric(horizontal: 18),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-          textStyle: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),
       ),
     );
   }
 
-  Widget _requestCard(
-    BuildContext context,
-    AssistanceRequest req,
-    dynamic currentStaff,
-  ) {
+  Widget _requestCard(BuildContext context, AssistanceRequest req, dynamic currentStaff) {
     final provider = context.read<RequestProvider>();
     final isExpanded = _expandedRequests.contains(req.id);
     final isAssignedToMe = req.staffId == currentStaff?.id;
     final status = req.status;
     final statusData = _statusStyle(status);
-    final assistance = req.assistanceType.isEmpty
-        ? 'Assistance'
-        : req.assistanceType.join(', ');
-
+    final assistance = req.assistanceType.isEmpty ? 'Assistance' : req.assistanceType.join(', ');
     final canAct = status != 'Completed' && status != 'Cancelled';
+
     String actionLabel;
     IconData actionIcon;
-
     if (status == 'Requested') {
       actionLabel = 'Accept Request';
       actionIcon = Icons.check;
@@ -214,32 +172,15 @@ class _StaffDashboardState extends State<StaffDashboard> {
       decoration: BoxDecoration(
         color: _surface,
         borderRadius: BorderRadius.circular(19),
-        border: Border.all(
-          color: status == 'Completed' ? _blue : const Color(0xFFFFC978),
-          width: status == 'Completed' ? 2 : 1.2,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            blurRadius: 6,
-            offset: Offset(0, 2),
-            color: Color(0x18000000),
-          ),
-        ],
+        border: Border.all(color: status == 'Completed' ? _blue : const Color(0xFFFFC978), width: status == 'Completed' ? 2 : 1.2),
+        boxShadow: const [BoxShadow(blurRadius: 6, offset: Offset(0, 2), color: Color(0x18000000))],
       ),
       child: Material(
         color: Colors.transparent,
         borderRadius: BorderRadius.circular(19),
         child: InkWell(
           borderRadius: BorderRadius.circular(19),
-          onTap: () {
-            setState(() {
-              if (isExpanded) {
-                _expandedRequests.remove(req.id);
-              } else {
-                _expandedRequests.add(req.id);
-              }
-            });
-          },
+          onTap: () => setState(() => isExpanded ? _expandedRequests.remove(req.id) : _expandedRequests.add(req.id)),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
             child: Column(
@@ -249,46 +190,19 @@ class _StaffDashboardState extends State<StaffDashboard> {
                   children: [
                     Container(
                       constraints: const BoxConstraints(maxWidth: 125),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 11,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: statusData.color,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+                      decoration: BoxDecoration(color: statusData.color, borderRadius: BorderRadius.circular(10)),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(statusData.icon, color: Colors.white, size: 16),
                           const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              status.toUpperCase(),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
+                          Flexible(child: Text(status.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12))),
                         ],
                       ),
                     ),
                     const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'PNR: ${req.pnr}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
+                    Expanded(child: Text('PNR: ${req.pnr}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
                     AnimatedRotation(
                       turns: isExpanded ? 0.5 : 0,
                       duration: const Duration(milliseconds: 180),
@@ -302,24 +216,18 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     const Icon(Icons.person, color: _blue, size: 21),
                     const SizedBox(width: 9),
                     Expanded(
+                      flex: 5,
+                      child: Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      flex: 4,
                       child: Text(
-                        req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
+                        req.trainNo.isEmpty ? 'Train' : req.trainNo,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    Text(
-                      req.trainNo.isEmpty ? 'Train' : req.trainNo,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w600,
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ],
@@ -335,82 +243,31 @@ class _StaffDashboardState extends State<StaffDashboard> {
                             const Divider(height: 22),
                             Row(
                               children: [
-                                Expanded(
-                                  child: _infoTile(
-                                    Icons.phone,
-                                    req.passengerPhone.isEmpty
-                                        ? 'No phone'
-                                        : req.passengerPhone,
-                                  ),
-                                ),
+                                Expanded(child: _infoTile(Icons.phone, req.passengerPhone.isEmpty ? 'No phone' : req.passengerPhone)),
                                 const SizedBox(width: 10),
-                                Expanded(
-                                  child: _infoTile(
-                                    Icons.meeting_room,
-                                    'Coach: ${req.coach}',
-                                  ),
-                                ),
+                                Expanded(child: _infoTile(Icons.meeting_room, 'Coach: ${req.coach}')),
                               ],
                             ),
                             const SizedBox(height: 10),
                             Container(
                               width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 9,
-                              ),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF0EEF7),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                  color: const Color(0xFFD6D1E1),
-                                ),
-                              ),
-                              child: Text(
-                                assistance,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  color: Colors.black87,
-                                ),
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                              decoration: BoxDecoration(color: const Color(0xFFF0EEF7), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD6D1E1))),
+                              child: Text(assistance, style: const TextStyle(fontSize: 14, color: Colors.black87)),
                             ),
-                            if (req.staffName != null &&
-                                req.staffName!.isNotEmpty) ...[
+                            if (req.staffName != null && req.staffName!.isNotEmpty) ...[
                               const SizedBox(height: 9),
-                              Text(
-                                status == 'Completed'
-                                    ? 'Done by: ${req.staffName}'
-                                    : 'Assigned to: ${req.staffName}',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 13,
-                                ),
-                              ),
+                              Text(status == 'Completed' ? 'Done by: ${req.staffName}' : 'Assigned to: ${req.staffName}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                             ],
                             if (canAct) ...[
                               const Divider(height: 25),
                               SizedBox(
                                 width: double.infinity,
                                 child: ElevatedButton.icon(
-                                  onPressed: provider.isLoading
-                                      ? null
-                                      : handleAction,
+                                  onPressed: provider.isLoading ? null : handleAction,
                                   icon: Icon(actionIcon, size: 19),
                                   label: Text(actionLabel),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _blue,
-                                    foregroundColor: Colors.white,
-                                    disabledBackgroundColor:
-                                        Colors.grey.shade300,
-                                    disabledForegroundColor:
-                                        Colors.grey.shade700,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 13,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                  ),
+                                  style: ElevatedButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white, disabledBackgroundColor: Colors.grey.shade300, disabledForegroundColor: Colors.grey.shade700, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
                                 ),
                               ),
                             ],
@@ -419,13 +276,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                       : const SizedBox.shrink(),
                 ),
                 const SizedBox(height: 3),
-                Text(
-                  isExpanded ? 'Tap to collapse' : 'Tap for request details',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
+                Text(isExpanded ? 'Tap to collapse' : 'Tap for request details', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
               ],
             ),
           ),
@@ -437,25 +288,12 @@ class _StaffDashboardState extends State<StaffDashboard> {
   Widget _infoTile(IconData icon, String text) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF1F1F1),
-        borderRadius: BorderRadius.circular(9),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFF1F1F1), borderRadius: BorderRadius.circular(9)),
       child: Row(
         children: [
           Icon(icon, color: Colors.grey.shade600, size: 18),
           const SizedBox(width: 7),
-          Expanded(
-            child: Text(
-              text,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          Expanded(child: Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
         ],
       ),
     );
