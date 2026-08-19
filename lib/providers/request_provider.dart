@@ -65,9 +65,6 @@ class RequestProvider extends ChangeNotifier {
     finally { _adminDataLoading = false; notifyListeners(); }
   }
 
-  /// Establishes an administrator session from the already-verified `admin/{uid}`
-  /// Firestore document. Admins intentionally live in the `admin` collection,
-  /// not `users`, so normal passenger login must not be used for this path.
   Future<void> setAdminSession({required String uid, required Map<String, dynamic> data}) async {
     _currentUser = UserProfile(
       id: uid,
@@ -91,8 +88,6 @@ class RequestProvider extends ChangeNotifier {
     try {
       final firebaseUser = _auth.currentUser; if (firebaseUser == null) return;
       await firebaseUser.reload(); final refreshed = _auth.currentUser; if (refreshed == null) return;
-
-      // Administrators are stored in `admin/{uid}` rather than `users/{uid}`.
       final adminDoc = await _firestore.collection('admin').doc(refreshed.uid).get();
       if (adminDoc.exists && adminDoc.data() != null) {
         final data = adminDoc.data()!;
@@ -103,12 +98,15 @@ class RequestProvider extends ChangeNotifier {
         await _auth.signOut();
         return;
       }
-
       final doc = await _firestore.collection('users').doc(refreshed.uid).get();
       if (doc.exists && doc.data() != null) {
-        _currentUser = UserProfile.fromMap(doc.data()!, refreshed.uid);
-        if (_currentUser!.name.trim().isEmpty || _currentUser!.email.trim().isEmpty) {
-          _currentUser = UserProfile(id: refreshed.uid, name: _currentUser!.name.trim().isEmpty ? (refreshed.displayName ?? 'RailSahayak User') : _currentUser!.name, username: _currentUser!.username, email: _currentUser!.email.trim().isEmpty ? (refreshed.email ?? '') : _currentUser!.email, phone: _currentUser!.phone, role: _currentUser!.role, disabilityType: _currentUser!.disabilityType, preferredAssistance: _currentUser!.preferredAssistance);
+        final data = doc.data()!;
+        final rawProfile = UserProfile.fromMap(data, refreshed.uid);
+        final hydratedName = rawProfile.name.trim().isEmpty ? ((refreshed.displayName ?? '').trim().isNotEmpty ? refreshed.displayName!.trim() : 'RailSahayak User') : rawProfile.name;
+        final hydratedEmail = rawProfile.email.trim().isEmpty ? (refreshed.email ?? '') : rawProfile.email;
+        _currentUser = UserProfile(id: refreshed.uid, name: hydratedName, username: rawProfile.username, email: hydratedEmail, phone: rawProfile.phone, role: rawProfile.role, disabilityType: rawProfile.disabilityType, preferredAssistance: rawProfile.preferredAssistance);
+        if (rawProfile.name.trim().isEmpty || rawProfile.email.trim().isEmpty) {
+          await _firestore.collection('users').doc(refreshed.uid).set({'name': hydratedName, 'email': hydratedEmail, 'role': rawProfile.role == UserRole.staff ? 'staff' : 'passenger'}, SetOptions(merge: true));
         }
         _needsProfileCompletion = _isProfileIncomplete(_currentUser!);
         if (!_needsProfileCompletion) await _startRequestListener();
@@ -147,26 +145,20 @@ class RequestProvider extends ChangeNotifier {
         email = (query.docs.first.data()['email'] ?? '').toString().trim();
       }
       if (isStaff && !email.contains('@')) { _lastLoginError = 'Staff login requires the approved company email address.'; return false; }
-
       final credential = await _auth.signInWithEmailAndPassword(email: email, password: password);
       final firebaseUser = credential.user;
       if (firebaseUser == null) { _lastLoginError = 'Firebase did not return a user account.'; return false; }
-
       final ref = _firestore.collection('users').doc(firebaseUser.uid);
       final doc = await ref.get();
-
       if (isStaff) {
         final approvedByUsers = doc.exists && doc.data() != null && doc.data()!['role'] == 'staff' && doc.data()!['status'] == 'approved';
         final approvedByRequest = await _isStaffApproved(email);
-        if (!approvedByUsers && !approvedByRequest) {
-          await _auth.signOut();
-          _lastLoginError = 'This Firebase account exists, but the administrator has not approved this staff email yet.';
-          return false;
-        }
+        if (!approvedByUsers && !approvedByRequest) { await _auth.signOut(); _lastLoginError = 'This Firebase account exists, but the administrator has not approved this staff email yet.'; return false; }
         if (doc.exists && doc.data() != null) {
           final data = doc.data()!;
-          _currentUser = UserProfile.fromMap({...data, 'role': 'staff'}, firebaseUser.uid);
-          await ref.set({'role': 'staff', 'status': 'approved', 'email': email}, SetOptions(merge: true));
+          final name = (data['name'] ?? '').toString().trim().isEmpty ? (firebaseUser.displayName ?? 'Railway Staff') : data['name'].toString();
+          _currentUser = UserProfile.fromMap({...data, 'role': 'staff', 'name': name, 'email': email}, firebaseUser.uid);
+          await ref.set({'role': 'staff', 'status': 'approved', 'email': email, 'name': name}, SetOptions(merge: true));
         } else {
           _currentUser = UserProfile(id: firebaseUser.uid, name: firebaseUser.displayName ?? 'Railway Staff', username: email.split('@').first.toLowerCase(), email: email, phone: '', role: UserRole.staff);
           await ref.set({..._currentUser!.toMap(), 'status': 'approved'}, SetOptions(merge: true));
@@ -176,11 +168,14 @@ class RequestProvider extends ChangeNotifier {
         await _startRequestListener();
         return true;
       }
-
       if (doc.exists && doc.data() != null) {
-        final profile = UserProfile.fromMap(doc.data()!, firebaseUser.uid);
-        if (profile.role != UserRole.passenger) { await _auth.signOut(); _lastLoginError = 'This account is not registered as a passenger.'; return false; }
-        _currentUser = profile;
+        final data = doc.data()!;
+        final rawProfile = UserProfile.fromMap(data, firebaseUser.uid);
+        if (rawProfile.role != UserRole.passenger) { await _auth.signOut(); _lastLoginError = 'This account is not registered as a passenger.'; return false; }
+        final name = rawProfile.name.trim().isEmpty ? ((firebaseUser.displayName ?? '').trim().isNotEmpty ? firebaseUser.displayName!.trim() : 'RailSahayak User') : rawProfile.name;
+        final profileEmail = rawProfile.email.trim().isEmpty ? (firebaseUser.email ?? email) : rawProfile.email;
+        _currentUser = UserProfile(id: firebaseUser.uid, name: name, username: rawProfile.username, email: profileEmail, phone: rawProfile.phone, role: UserRole.passenger, disabilityType: rawProfile.disabilityType, preferredAssistance: rawProfile.preferredAssistance);
+        await ref.set({'name': name, 'email': profileEmail, 'role': 'passenger'}, SetOptions(merge: true));
       } else {
         await _auth.signOut();
         _lastLoginError = 'No RailSahayak profile was found for this Firebase account.';
@@ -214,17 +209,24 @@ class RequestProvider extends ChangeNotifier {
       final googleUser = await _googleSignIn.authenticate(); final idToken = googleUser.authentication.idToken; if (idToken == null) return false;
       final credential = await _auth.signInWithCredential(GoogleAuthProvider.credential(idToken: idToken)); final user = credential.user; if (user == null) return false;
       final email = (user.email ?? googleUser.email).trim().toLowerCase();
+      final googleName = (user.displayName ?? googleUser.displayName ?? '').trim();
       if (isStaff && !await _isStaffApproved(email)) { await _auth.signOut(); await _googleSignIn.signOut(); return false; }
       final ref = _firestore.collection('users').doc(user.uid); final doc = await ref.get();
       if (doc.exists && doc.data() != null) {
-        final profile = UserProfile.fromMap(doc.data()!, user.uid);
+        final data = doc.data()!;
+        final profile = UserProfile.fromMap(data, user.uid);
+        final hydratedName = profile.name.trim().isEmpty ? (googleName.isNotEmpty ? googleName : 'Google User') : profile.name;
+        final hydratedEmail = profile.email.trim().isEmpty ? email : profile.email;
         if (profile.role == UserRole.admin) { _currentUser = profile; _needsProfileCompletion = false; await _startRequestListener(); await refreshAdminData(); return true; }
-        if (isStaff) { if (profile.role != UserRole.staff) await ref.set({'role': 'staff', 'status': 'approved'}, SetOptions(merge: true)); _currentUser = UserProfile(id: profile.id, name: profile.name, username: profile.username, email: profile.email, phone: profile.phone, role: UserRole.staff, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance); _needsProfileCompletion = false; await _startRequestListener(); return true; }
+        if (isStaff) { if (profile.role != UserRole.staff) await ref.set({'role': 'staff', 'status': 'approved'}, SetOptions(merge: true)); _currentUser = UserProfile(id: profile.id, name: hydratedName, username: profile.username, email: hydratedEmail, phone: profile.phone, role: UserRole.staff, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance); _needsProfileCompletion = false; await _startRequestListener(); return true; }
         if (profile.role != UserRole.passenger) { await _auth.signOut(); await _googleSignIn.signOut(); return false; }
-        _currentUser = profile; _needsProfileCompletion = _isProfileIncomplete(profile); if (!_needsProfileCompletion) await _startRequestListener(); return true;
+        _currentUser = UserProfile(id: profile.id, name: hydratedName, username: profile.username, email: hydratedEmail, phone: profile.phone, role: UserRole.passenger, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance);
+        if (profile.name.trim().isEmpty || profile.email.trim().isEmpty) await ref.set({'name': hydratedName, 'email': hydratedEmail, 'role': 'passenger'}, SetOptions(merge: true));
+        _needsProfileCompletion = _isProfileIncomplete(_currentUser!); if (!_needsProfileCompletion) await _startRequestListener(); return true;
       }
-      if (isStaff) { _currentUser = UserProfile(id: user.uid, name: user.displayName ?? 'Railway Staff', username: '', email: email, phone: '', role: UserRole.staff); await ref.set({..._currentUser!.toMap(), 'status': 'approved'}); _needsProfileCompletion = false; await _startRequestListener(); return true; }
-      final name = (user.displayName ?? '').trim().isEmpty ? 'Google User' : user.displayName!.trim(); _currentUser = UserProfile(id: user.uid, name: name, username: '', email: email, phone: '', role: UserRole.passenger); _pendingGoogleUser = user; _pendingGoogleName = name; _pendingGoogleEmail = email; _needsProfileCompletion = true; return true;
+      if (isStaff) { _currentUser = UserProfile(id: user.uid, name: googleName.isEmpty ? 'Railway Staff' : googleName, username: '', email: email, phone: '', role: UserRole.staff); await ref.set({..._currentUser!.toMap(), 'status': 'approved'}); _needsProfileCompletion = false; await _startRequestListener(); return true; }
+      final name = googleName.isEmpty ? 'Google User' : googleName;
+      _currentUser = UserProfile(id: user.uid, name: name, username: '', email: email, phone: '', role: UserRole.passenger); _pendingGoogleUser = user; _pendingGoogleName = name; _pendingGoogleEmail = email; _needsProfileCompletion = true; return true;
     } catch (e) { debugPrint('Google login error: $e'); return false; }
     finally { _isLoading = false; notifyListeners(); }
   }
