@@ -40,13 +40,15 @@ extension PassengerSignup on RequestProvider {
 
     final firestore = FirebaseFirestore.instance;
     final auth = FirebaseAuth.instance;
+    const timeout = Duration(seconds: 15);
 
     try {
       final existingUsername = await firestore
           .collection('users')
           .where('username', isEqualTo: cleanUsername)
           .limit(1)
-          .get();
+          .get()
+          .timeout(timeout);
       if (existingUsername.docs.isNotEmpty) {
         return 'That username is already registered. Please choose another one.';
       }
@@ -54,13 +56,13 @@ extension PassengerSignup on RequestProvider {
       final credential = await auth.createUserWithEmailAndPassword(
         email: cleanEmail,
         password: password,
-      );
+      ).timeout(timeout);
       final firebaseUser = credential.user;
       if (firebaseUser == null) {
         return 'Firebase did not create the account. Please try again.';
       }
 
-      await firebaseUser.updateDisplayName(cleanName);
+      await firebaseUser.updateDisplayName(cleanName).timeout(timeout);
 
       await firestore.collection('users').doc(firebaseUser.uid).set({
         'name': cleanName,
@@ -70,7 +72,7 @@ extension PassengerSignup on RequestProvider {
         'role': 'passenger',
         'disabilityType': null,
         'preferredAssistance': null,
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)).timeout(timeout);
 
       return null;
     } on FirebaseAuthException catch (e) {
@@ -88,6 +90,11 @@ extension PassengerSignup on RequestProvider {
         default:
           return 'Could not create the account (${e.code}). Please try again.';
       }
+    } on TimeoutException {
+      try {
+        await auth.currentUser?.delete();
+      } catch (_) {}
+      return 'Firebase is taking too long to respond. Check your internet connection and try again.';
     } catch (e) {
       // If Firestore fails after Firebase Auth created the user, remove the
       // partially-created Auth account so the email is not permanently stuck.
