@@ -15,6 +15,7 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   static const _red = Color(0xFFC62828);
+  static const _deepRed = Color(0xFF8E0000);
   static const _surface = Color(0xFFFFF4EC);
   Future<List<UserProfile>>? _staffFuture;
   Future<List<Map<String, dynamic>>>? _requestsFuture;
@@ -130,88 +131,103 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget build(BuildContext context) {
     final provider = context.watch<RequestProvider>();
     final user = provider.currentUser;
-    return Scaffold(
-      backgroundColor: const Color(0xFFFFFBF8),
-      appBar: AppBar(
-        title: const Text('RailSahayak Admin', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: _red,
-        foregroundColor: Colors.white,
-        actions: [
-          IconButton(tooltip: 'Refresh', onPressed: _loggingOut ? null : _refresh, icon: const Icon(Icons.refresh)),
-          IconButton(tooltip: 'Sign out', onPressed: _loggingOut ? null : _logout, icon: _loggingOut ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.logout)),
-        ],
+    final adminTheme = Theme.of(context).copyWith(
+      colorScheme: ColorScheme.fromSeed(seedColor: _red, brightness: Brightness.light).copyWith(
+        primary: _red,
+        secondary: _deepRed,
+        surface: _surface,
       ),
-      body: RefreshIndicator(
-        onRefresh: _refresh,
-        child: ListView(
-          padding: const EdgeInsets.all(20),
-          children: [
-            Card(
-              color: _red,
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(Icons.admin_panel_settings, color: Colors.white, size: 34),
-                  const SizedBox(height: 12),
-                  Text(user?.name.isNotEmpty == true ? user!.name : 'Administrator', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                  Text(user?.email ?? '', style: const TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 12),
-                  const Text('ADMINISTRATOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ]),
-              ),
-            ),
-            const SizedBox(height: 22),
-            const Text('Staff approval requests', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            const Text('Approve a staff member before they can use the Railway Staff login.', style: TextStyle(color: Colors.grey)),
-            const SizedBox(height: 12),
-            FutureBuilder<List<Map<String, dynamic>>>(
-              future: _requestsFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
-                if (snapshot.hasError) return Card(child: ListTile(title: const Text('Could not load staff requests'), subtitle: Text('${snapshot.error}')));
-                final requests = snapshot.data ?? [];
-                if (requests.isEmpty) return const Card(color: _surface, child: ListTile(leading: Icon(Icons.info_outline), title: Text('No pending staff requests')));
-                return Column(children: requests.map((request) {
-                  final name = (request['name'] ?? 'Railway Staff').toString();
-                  final email = (request['email'] ?? '').toString();
-                  final phone = (request['phone'] ?? '').toString();
-                  final id = (request['id'] ?? '').toString();
-                  final busy = _busyRequestIds.contains(id);
-                  return Card(color: _surface, child: ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.badge_outlined)),
-                    title: Text(name),
-                    subtitle: Text('$email\n${phone.isEmpty ? 'No phone listed' : phone}'),
-                    isThreeLine: true,
-                    trailing: busy ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2)) : Wrap(children: [
-                      IconButton(tooltip: 'Approve', onPressed: () => _approveRequest(request), icon: const Icon(Icons.check_circle_outline, color: Colors.green)),
-                      IconButton(tooltip: 'Reject', onPressed: () => _rejectRequest(id), icon: const Icon(Icons.cancel_outlined, color: Colors.red)),
-                    ]),
-                  ));
-                }).toList());
-              },
-            ),
-            const SizedBox(height: 22),
-            const Text('Approved staff', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            FutureBuilder<List<UserProfile>>(
-              future: _staffFuture,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
-                final staff = snapshot.data ?? [];
-                if (staff.isEmpty) return const Card(color: _surface, child: ListTile(title: Text('No approved staff yet')));
-                return Column(children: staff.map((m) => Card(color: _surface, child: ListTile(
-                  leading: const Icon(Icons.verified_user_outlined, color: Colors.green),
-                  title: Text(m.name.isEmpty ? 'Railway Staff' : m.name),
-                  subtitle: Text('${m.email}\n${m.phone.isEmpty ? 'No phone listed' : m.phone}'),
-                  isThreeLine: true,
-                  trailing: IconButton(tooltip: 'Send password reset email', onPressed: m.email.isEmpty ? null : () => _resetPassword(m.email), icon: const Icon(Icons.key_outlined)),
-                ))).toList());
-              },
-            ),
-            const SizedBox(height: 22),
-            const Card(color: _surface, child: Padding(padding: EdgeInsets.all(18), child: Text('Staff approval is stored in Firestore. Passwords are never stored in Firestore. Staff must authenticate with their approved company email.'))),
+      progressIndicatorTheme: const ProgressIndicatorThemeData(color: _red),
+      iconTheme: const IconThemeData(color: _red),
+      dividerColor: const Color(0xFFFFD8D2),
+    );
+
+    return Theme(
+      data: adminTheme,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFFFFBF8),
+        appBar: AppBar(
+          title: const Text('RailSahayak Admin', style: TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: _red,
+          foregroundColor: Colors.white,
+          actions: [
+            IconButton(tooltip: 'Refresh', onPressed: _loggingOut ? null : _refresh, icon: const Icon(Icons.refresh)),
+            IconButton(tooltip: 'Sign out', onPressed: _loggingOut ? null : _logout, icon: _loggingOut ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Icon(Icons.logout)),
           ],
+        ),
+        body: RefreshIndicator(
+          color: _red,
+          onRefresh: _refresh,
+          child: ListView(
+            padding: const EdgeInsets.all(20),
+            children: [
+              Card(
+                color: _red,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    const Icon(Icons.admin_panel_settings, color: Colors.white, size: 34),
+                    const SizedBox(height: 12),
+                    Text(user?.name.isNotEmpty == true ? user!.name : 'Administrator', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                    Text(user?.email ?? '', style: const TextStyle(color: Colors.white70)),
+                    const SizedBox(height: 12),
+                    const Text('ADMINISTRATOR', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ]),
+                ),
+              ),
+              const SizedBox(height: 22),
+              const Text('Staff approval requests', style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              const Text('Approve a staff member before they can use the Railway Staff login.', style: TextStyle(color: Colors.grey)),
+              const SizedBox(height: 12),
+              FutureBuilder<List<Map<String, dynamic>>>(
+                future: _requestsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
+                  if (snapshot.hasError) return Card(child: ListTile(title: const Text('Could not load staff requests'), subtitle: Text('${snapshot.error}')));
+                  final requests = snapshot.data ?? [];
+                  if (requests.isEmpty) return const Card(color: _surface, child: ListTile(leading: Icon(Icons.info_outline, color: _red), title: Text('No pending staff requests')));
+                  return Column(children: requests.map((request) {
+                    final name = (request['name'] ?? 'Railway Staff').toString();
+                    final email = (request['email'] ?? '').toString();
+                    final phone = (request['phone'] ?? '').toString();
+                    final id = (request['id'] ?? '').toString();
+                    final busy = _busyRequestIds.contains(id);
+                    return Card(color: _surface, child: ListTile(
+                      leading: const CircleAvatar(backgroundColor: Color(0xFFFFE2DD), child: Icon(Icons.badge_outlined, color: _red)),
+                      title: Text(name),
+                      subtitle: Text('$email\n${phone.isEmpty ? 'No phone listed' : phone}'),
+                      isThreeLine: true,
+                      trailing: busy ? const SizedBox(width: 28, height: 28, child: CircularProgressIndicator(strokeWidth: 2)) : Wrap(children: [
+                        IconButton(tooltip: 'Approve', onPressed: () => _approveRequest(request), icon: const Icon(Icons.check_circle_outline, color: Colors.green)),
+                        IconButton(tooltip: 'Reject', onPressed: () => _rejectRequest(id), icon: const Icon(Icons.cancel_outlined, color: _red)),
+                      ]),
+                    ));
+                  }).toList());
+                },
+              ),
+              const SizedBox(height: 22),
+              const Text('Approved staff', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              FutureBuilder<List<UserProfile>>(
+                future: _staffFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) return const Card(child: Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator())));
+                  final staff = snapshot.data ?? [];
+                  if (staff.isEmpty) return const Card(color: _surface, child: ListTile(leading: Icon(Icons.people_outline, color: _red), title: Text('No approved staff yet')));
+                  return Column(children: staff.map((m) => Card(color: _surface, child: ListTile(
+                    leading: const Icon(Icons.verified_user_outlined, color: Colors.green),
+                    title: Text(m.name.isEmpty ? 'Railway Staff' : m.name),
+                    subtitle: Text('${m.email}\n${m.phone.isEmpty ? 'No phone listed' : m.phone}'),
+                    isThreeLine: true,
+                    trailing: IconButton(tooltip: 'Send password reset email', onPressed: m.email.isEmpty ? null : () => _resetPassword(m.email), icon: const Icon(Icons.key_outlined, color: _red)),
+                  ))).toList());
+                },
+              ),
+              const SizedBox(height: 22),
+              const Card(color: _surface, child: Padding(padding: EdgeInsets.all(18), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.admin_panel_settings_outlined, color: _red), SizedBox(width: 12), Expanded(child: Text('Staff approval is stored in Firestore. Passwords are never stored in Firestore. Staff must authenticate with their approved company email.'))]))),
+            ],
+          ),
         ),
       ),
     );
