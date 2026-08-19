@@ -116,7 +116,6 @@ class _StaffDashboardState extends State<StaffDashboard> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: _surface, borderRadius: BorderRadius.circular(19),
-        // Keep the whole card visually synchronized with its live status.
         border: Border.all(color: style.color.withOpacity(0.65), width: 1.8),
         boxShadow: const [BoxShadow(blurRadius: 6, offset: Offset(0, 2), color: Color(0x18000000))],
       ),
@@ -147,7 +146,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                   if (req.staffName?.isNotEmpty == true) ...[const SizedBox(height: 9), Text(req.status == 'Completed' ? 'Done by: ${req.staffName}' : 'Assigned to: ${req.staffName}', style: const TextStyle(color: Colors.grey, fontSize: 13))],
                   if (active) ...[
                     const Divider(height: 25),
-                    SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: provider.isLoading ? null : act, icon: Icon(action.$2, size: 19), label: Text(action.$1), style: ElevatedButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))))),
+                    SizedBox(width: double.infinity, child: ElevatedButton.icon(onPressed: provider.isLoading ? null : act, icon: Icon(action.$2, size: 19), label: Text(action.$1), style: ElevatedButton.styleFrom(backgroundColor: _actionColor(req.status), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))))),
                   ],
                 ]) : const SizedBox.shrink(),
               ),
@@ -165,6 +164,19 @@ class _StaffDashboardState extends State<StaffDashboard> {
     if (status == 'Assigned') return ('Start Assisting', Icons.directions_walk);
     if (status == 'Assisting' && !mine) return ('Take Over Request', Icons.swap_horiz);
     return ('Passenger Boarded', Icons.check_circle_outline);
+  }
+
+  Color _actionColor(String status) {
+    switch (status) {
+      case 'Requested':
+        return const Color(0xFFFF9800);
+      case 'Assigned':
+        return _blue;
+      case 'Assisting':
+        return const Color(0xFF43A047);
+      default:
+        return _blue;
+    }
   }
 
   Widget _info(IconData icon, String text) => Container(
