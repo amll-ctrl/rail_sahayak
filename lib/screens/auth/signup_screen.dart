@@ -56,21 +56,27 @@ class _SignupScreenState extends State<SignupScreen> {
         );
         return;
       }
-      await provider.completePassengerSignupSession(UserProfile(
-        id: '',
-        name: _nameController.text.trim(),
-        username: _usernameController.text.trim().toLowerCase(),
-        email: _emailController.text.trim().toLowerCase(),
-        phone: _phoneController.text.trim().replaceAll(RegExp(r'[\\s-]'), ''),
-        role: UserRole.passenger,
-      ));
-      // Replace the temporary profile with the authenticated Firebase UID.
-      final success = await provider.login(_emailController.text.trim(), _passwordController.text, false);
+
+      // Firebase automatically signs the user in after account creation, but
+      // RequestProvider still needs to hydrate the Firestore profile using the
+      // real Firebase UID. Do that directly instead of first creating a
+      // temporary in-memory profile with an empty ID.
+      final success = await provider.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+        false,
+      );
       if (!mounted) return;
       if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account was created, but automatic sign-in failed. Please log in.')));
+        final message = provider.lastLoginError ??
+            'Account was created, but the session could not be initialized. Please log in.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), backgroundColor: Colors.orange),
+        );
         return;
       }
+
+      // main.dart reacts to the provider session and opens the passenger home.
       Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _isCompleting = false);
@@ -100,9 +106,9 @@ class _SignupScreenState extends State<SignupScreen> {
               const SizedBox(height: 16),
               TextFormField(controller: _usernameController, enabled: !isLoading, decoration: deco('Username', Icons.alternate_email), validator: (v) { final x = v?.trim() ?? ''; return x.length < 3 ? 'Username must be at least 3 characters' : (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(x) ? 'Use only letters, numbers and _' : null); }),
               const SizedBox(height: 16),
-              TextFormField(controller: _emailController, enabled: !isLoading, keyboardType: TextInputType.emailAddress, decoration: deco('Email', Icons.email_outlined), validator: (v) => RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$').hasMatch(v?.trim() ?? '') ? null : 'Enter a valid email address'),
+              TextFormField(controller: _emailController, enabled: !isLoading, keyboardType: TextInputType.emailAddress, decoration: deco('Email', Icons.email_outlined), validator: (v) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v?.trim() ?? '') ? null : 'Enter a valid email address'),
               const SizedBox(height: 16),
-              TextFormField(controller: _phoneController, enabled: !isLoading, keyboardType: TextInputType.phone, decoration: deco('Phone Number', Icons.phone_outlined), validator: (v) => RegExp(r'^[0-9]{10}$').hasMatch((v ?? '').replaceAll(RegExp(r'[\\s-]'), '')) ? null : 'Enter a valid 10-digit phone number'),
+              TextFormField(controller: _phoneController, enabled: !isLoading, keyboardType: TextInputType.phone, decoration: deco('Phone Number', Icons.phone_outlined), validator: (v) => RegExp(r'^[0-9]{10}$').hasMatch((v ?? '').replaceAll(RegExp(r'[\s-]'), '')) ? null : 'Enter a valid 10-digit phone number'),
               const SizedBox(height: 16),
               TextFormField(controller: _passwordController, enabled: !isLoading, obscureText: _obscurePassword, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off), onPressed: () => setState(() => _obscurePassword = !_obscurePassword),), border: const OutlineInputBorder()), validator: (v) => v == null || v.length < 6 ? 'Password must be at least 6 characters' : null),
               const SizedBox(height: 16),
