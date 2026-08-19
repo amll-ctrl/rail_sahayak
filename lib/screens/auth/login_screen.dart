@@ -100,9 +100,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.indigo.shade50,
+                        color: Colors.red.shade50,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.indigo.shade100),
+                        border: Border.all(color: Colors.red.shade100),
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -111,11 +111,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             : () => Navigator.of(context).push(
                                   MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
                                 ),
-                        child: const Row(
+                        child: Row(
                           children: [
-                            Icon(Icons.admin_panel_settings, color: Color(0xFF283593), size: 30),
-                            SizedBox(width: 12),
-                            Expanded(
+                            Icon(Icons.admin_panel_settings, color: Colors.red.shade800, size: 30),
+                            const SizedBox(width: 12),
+                            const Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ],
                               ),
                             ),
-                            Icon(Icons.chevron_right, color: Color(0xFF283593)),
+                            Icon(Icons.chevron_right, color: Color(0xFFC62828)),
                           ],
                         ),
                       ),
