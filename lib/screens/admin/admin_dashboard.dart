@@ -15,7 +15,7 @@ class AdminDashboard extends StatefulWidget {
 class _AdminDashboardState extends State<AdminDashboard> {
   static const _red = Color(0xFFC62828);
   static const _deepRed = Color(0xFF8E0000);
-  static const _surface = Color(0xFFFF4EC);
+  static const _surface = Color(0xFFFFF4EC);
   final _db = FirebaseFirestore.instance;
   final Set<String> _busy = <String>{};
   Future<_AdminData>? _dataFuture;
@@ -154,24 +154,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     finally { if (mounted) setState(() => _loggingOut = false); }
   }
 
-  void _showPassengerDetails(Map<String, dynamic> u) {
-    final id = '${u['id']}';
-    final disabled = '${u['status']}'.toLowerCase() == 'disabled';
-    final requests = _currentData?.requests.where((r) => '${r['passengerId']}' == id).toList() ?? const [];
-    showModalBottomSheet(context: context, isScrollControlled: true, builder: (context) => SafeArea(child: Padding(
-      padding: const EdgeInsets.all(20), child: Wrap(children: [
-        Text('${u['name'] ?? 'Passenger'}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-        const SizedBox(height: 10),
-        _detail('Email', '${u['email'] ?? '-'}'), _detail('Phone', '${u['phone'] ?? '-'}'),
-        _detail('Username', '${u['username'] ?? '-'}'), _detail('Requests', '${requests.length}'),
-        const SizedBox(height: 16),
-        FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: _red), onPressed: _busy.contains('user:$id') ? null : () async { Navigator.pop(context); await _setUserStatus(u, disabled); }, icon: Icon(disabled ? Icons.person_add : Icons.block), label: Text(disabled ? 'Enable passenger' : 'Disable passenger')),
-      ]),
-    )));
-  }
-
-  _AdminData? get _currentData => _dataFuture == null ? null : null;
-
   Widget _detail(String label, String value) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('$label: $value'));
 
   void _showUsers(_AdminData data) {
@@ -179,7 +161,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     _showListSheet(title: 'Passenger management', items: passengers, empty: 'No passengers found.', builder: (u) {
       final disabled = '${u['status']}'.toLowerCase() == 'disabled';
       return Card(color: _surface, child: ListTile(
-        onTap: () => _showPassengerDetailsWithData(u, data),
+        onTap: () => _showPassengerDetails(u, data),
         leading: Icon(disabled ? Icons.person_off_outlined : Icons.person_outline, color: _red),
         title: Text('${u['name'] ?? 'Passenger'}'),
         subtitle: Text('${u['email'] ?? ''}\n${disabled ? 'Access disabled' : (u['phone'] ?? 'No phone')}'), isThreeLine: true,
@@ -188,8 +170,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
   }
 
-  void _showPassengerDetailsWithData(Map<String, dynamic> u, _AdminData data) {
-    final id = '${u['id']}'; final disabled = '${u['status']}'.toLowerCase() == 'disabled';
+  void _showPassengerDetails(Map<String, dynamic> u, _AdminData data) {
+    final id = '${u['id']}';
+    final disabled = '${u['status']}'.toLowerCase() == 'disabled';
     final count = data.requests.where((r) => '${r['passengerId']}' == id).length;
     showModalBottomSheet(context: context, isScrollControlled: true, builder: (context) => SafeArea(child: Padding(padding: const EdgeInsets.all(20), child: Wrap(children: [
       Text('${u['name'] ?? 'Passenger'}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), const SizedBox(height: 12),
@@ -231,8 +214,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ])));
   }
 
-  Widget _statusButton(String id, Map<String, dynamic> r, String status) => OutlinedButton(
-    onPressed: _busy.contains('request:$id') ? null : () => _updateRequestStatus(r, status), child: Text(status));
+  Widget _statusButton(String id, Map<String, dynamic> r, String status) => OutlinedButton(onPressed: _busy.contains('request:$id') ? null : () => _updateRequestStatus(r, status), child: Text(status));
 
   void _showApprovals(List<Map<String, dynamic>> pending) {
     _showListSheet(title: 'Staff approval requests', items: pending, empty: 'No pending staff requests.', builder: (r) {
