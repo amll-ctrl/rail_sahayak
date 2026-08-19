@@ -1,7 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/user_profile.dart';
 import '../../providers/request_provider.dart';
 
 class ProfileCompletionScreen extends StatefulWidget {
@@ -61,27 +63,59 @@ class _ProfileCompletionScreenState extends State<ProfileCompletionScreen> {
         return;
       }
 
+      final authUser = FirebaseAuth.instance.currentUser;
+      final name = user.name.trim().isNotEmpty
+          ? user.name.trim()
+          : ((authUser?.displayName ?? '').trim().isNotEmpty
+              ? authUser!.displayName!.trim()
+              : (provider.pendingGoogleName.trim().isNotEmpty
+                  ? provider.pendingGoogleName.trim()
+                  : 'RailSahayak User'));
+      final email = user.email.trim().isNotEmpty
+          ? user.email.trim().toLowerCase()
+          : (authUser?.email ?? provider.pendingGoogleEmail).trim().toLowerCase();
+
+      // Save the complete passenger profile, including the Google-provided
+      // name/email. Previously only username and phone were saved, which is
+      // why the dashboard later showed "Welcome, !".
       await firestore.collection('users').doc(user.id).set({
+        'name': name,
         'username': username,
+        'email': email,
         'phone': phone,
+        'role': 'passenger',
+        'disabilityType': user.disabilityType,
+        'preferredAssistance': user.preferredAssistance,
       }, SetOptions(merge: true));
 
-      // OTP verification is disabled for now. Refreshing the session reloads
-      // the completed profile from Firestore without requiring phone auth.
-      await provider.logout();
-      if (!mounted) return;
+      if (authUser != null && name.isNotEmpty && authUser.displayName != name) {
+        try {
+          await authUser.updateDisplayName(name);
+        } catch (_) {
+          // Firestore remains the source of truth for the RailSahayak profile.
+        }
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Profile completed! Please sign in once more to continue.'),
-          backgroundColor: Colors.green,
-        ),
+      // Keep the Firebase session alive and immediately promote the completed
+      // profile into RequestProvider. Do NOT log the user out and force a
+      // second login.
+      final completedProfile = UserProfile(
+        id: user.id,
+        name: name,
+        username: username,
+        email: email,
+        phone: phone,
+        role: UserRole.passenger,
+        disabilityType: user.disabilityType,
+        preferredAssistance: user.preferredAssistance,
       );
-    } catch (_) {
+
+      await provider.completePassengerSignupSession(completedProfile);
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Could not save your profile. Please try again.'),
+          SnackBar(
+            content: Text('Could not save your profile. Please try again. ($e)'),
             backgroundColor: Colors.red,
           ),
         );
