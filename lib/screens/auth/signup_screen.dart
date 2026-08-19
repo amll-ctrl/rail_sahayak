@@ -1,4 +1,3 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -41,6 +40,7 @@ class _SignupScreenState extends State<SignupScreen> {
     final provider = context.read<RequestProvider>();
     FocusScope.of(context).unfocus();
     setState(() => _isCompleting = true);
+
     try {
       final error = await provider.signup(
         name: _nameController.text.trim(),
@@ -51,6 +51,7 @@ class _SignupScreenState extends State<SignupScreen> {
         role: UserRole.passenger,
       );
       if (!mounted) return;
+
       if (error != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(error), backgroundColor: Colors.red),
@@ -58,30 +59,9 @@ class _SignupScreenState extends State<SignupScreen> {
         return;
       }
 
-      // createUserWithEmailAndPassword already signs the user in. Do not call
-      // login() again: that second Firebase sign-in was causing the signup
-      // screen to keep spinning and could also overwrite the fresh session.
-      final firebaseUser = FirebaseAuth.instance.currentUser;
-      if (firebaseUser == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account was created, but the session could not be started. Please log in.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-        return;
-      }
-
-      await provider.completePassengerSignupSession(UserProfile(
-        id: firebaseUser.uid,
-        name: _nameController.text.trim(),
-        username: _usernameController.text.trim().toLowerCase(),
-        email: _emailController.text.trim().toLowerCase(),
-        phone: _phoneController.text.trim().replaceAll(RegExp(r'[\s-]'), ''),
-        role: UserRole.passenger,
-      ));
-
-      if (!mounted) return;
+      // signup() now finishes the Provider session itself, so there is no
+      // second Firebase sign-in/session initialization that can leave this
+      // screen spinning.
       Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _isCompleting = false);
@@ -97,6 +77,7 @@ class _SignupScreenState extends State<SignupScreen> {
           prefixIcon: Icon(icon),
           border: const OutlineInputBorder(),
         );
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Create Passenger Account', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
@@ -127,18 +108,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       const SizedBox(height: 16),
                       TextFormField(controller: _usernameController, enabled: !isLoading, decoration: deco('Username', Icons.alternate_email), validator: (v) { final x = v?.trim() ?? ''; return x.length < 3 ? 'Username must be at least 3 characters' : (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(x) ? 'Use only letters, numbers and _' : null); }),
                       const SizedBox(height: 16),
-                      TextFormField(
-                        controller: _emailController,
-                        enabled: !isLoading,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: deco('Email', Icons.email_outlined),
-                        validator: (v) {
-                          final email = v?.trim() ?? '';
-                          if (email.isEmpty) return 'Enter your email address';
-                          final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                          return emailRegex.hasMatch(email) ? null : 'Enter a valid email address';
-                        },
-                      ),
+                      TextFormField(controller: _emailController, enabled: !isLoading, keyboardType: TextInputType.emailAddress, decoration: deco('Email', Icons.email_outlined), validator: (v) { final email = v?.trim() ?? ''; if (email.isEmpty) return 'Enter your email address'; return RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email) ? null : 'Enter a valid email address'; }),
                       const SizedBox(height: 16),
                       TextFormField(controller: _phoneController, enabled: !isLoading, keyboardType: TextInputType.phone, decoration: deco('Phone Number', Icons.phone_outlined), validator: (v) => RegExp(r'^[0-9]{10}$').hasMatch((v ?? '').replaceAll(RegExp(r'[\s-]'), '')) ? null : 'Enter a valid 10-digit phone number'),
                       const SizedBox(height: 16),
