@@ -47,7 +47,7 @@ class NotificationService {
     );
 
     await _localNotifications.initialize(
-      initializationSettings,
+      settings: initializationSettings,
       onDidReceiveNotificationResponse: (response) {
         debugPrint('Local notification tapped: ${response.payload}');
       },
@@ -118,9 +118,6 @@ class NotificationService {
     }
   }
 
-  // Free fallback: Firestore realtime listeners notify the user with a local
-  // notification while the app process is alive. This does not replace
-  // server-triggered FCM for a completely killed app.
   Future<void> _watchUserProfile(User user) async {
     await _profileSubscription?.cancel();
 
@@ -244,10 +241,10 @@ class NotificationService {
     const details = NotificationDetails(android: androidDetails, iOS: iosDetails);
 
     await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch.remainder(1 << 31),
-      title,
-      body,
-      details,
+      id: DateTime.now().millisecondsSinceEpoch.remainder(1 << 31),
+      title: title,
+      body: body,
+      notificationDetails: details,
       payload: payload,
     );
   }

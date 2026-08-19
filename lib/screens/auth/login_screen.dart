@@ -74,6 +74,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final loading = provider.isLoading;
     final primary = _isStaff ? Colors.indigo.shade800 : Colors.orange.shade800;
 
+    const adminAccent = Color(0xFFD32F2F);
+    const adminAccentLight = Color(0xFFFFEBEE);
+    const adminAccentBorder = Color(0xFFFFCDD2);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -100,9 +104,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: Colors.red.shade50,
+                        color: adminAccentLight,
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.red.shade100),
+                        border: Border.all(color: adminAccentBorder),
                       ),
                       child: InkWell(
                         borderRadius: BorderRadius.circular(14),
@@ -111,11 +115,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             : () => Navigator.of(context).push(
                                   MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
                                 ),
-                        child: Row(
+                        child: const Row(
                           children: [
-                            Icon(Icons.admin_panel_settings, color: Colors.red.shade800, size: 30),
-                            const SizedBox(width: 12),
-                            const Expanded(
+                            Icon(Icons.admin_panel_settings, color: adminAccent, size: 30),
+                            SizedBox(width: 12),
+                            Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
@@ -125,7 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ],
                               ),
                             ),
-                            Icon(Icons.chevron_right, color: Color(0xFFC62828)),
+                            Icon(Icons.chevron_right, color: adminAccent),
                           ],
                         ),
                       ),
