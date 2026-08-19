@@ -15,6 +15,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
   static const _blue = Color(0xFF303F9F);
   static const _surface = Color(0xFFFFF4EC);
   String _filter = 'All';
+  final Set<String> _expandedRequests = <String>{};
 
   List<AssistanceRequest> _filteredRequests(List<AssistanceRequest> requests) {
     if (_filter == 'All') return requests;
@@ -58,7 +59,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
             SliverToBoxAdapter(
               child: Container(
                 color: _blue,
-                padding: const EdgeInsets.fromLTRB(28, 0, 28, 28),
+                padding: const EdgeInsets.fromLTRB(28, 0, 28, 22),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -66,14 +67,14 @@ class _StaffDashboardState extends State<StaffDashboard> {
                       'Active Station Duty: $staffName',
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 22,
+                        fontSize: 21,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 8),
                     const Text(
                       'Assisting passengers with disabilities and boardings.',
-                      style: TextStyle(color: Colors.white70, fontSize: 16),
+                      style: TextStyle(color: Colors.white70, fontSize: 15),
                     ),
                   ],
                 ),
@@ -81,9 +82,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
             ),
             SliverToBoxAdapter(
               child: SizedBox(
-                height: 88,
+                height: 78,
                 child: ListView(
-                  padding: const EdgeInsets.fromLTRB(20, 28, 20, 14),
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                   scrollDirection: Axis.horizontal,
                   children: [
                     _filterButton('All', Icons.check),
@@ -112,7 +113,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(28, 8, 28, 24),
+                padding: const EdgeInsets.fromLTRB(20, 6, 20, 20),
                 sliver: SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) => _requestCard(
@@ -133,24 +134,24 @@ class _StaffDashboardState extends State<StaffDashboard> {
   Widget _filterButton(String label, IconData icon) {
     final selected = _filter == label;
     return Padding(
-      padding: const EdgeInsets.only(right: 14),
+      padding: const EdgeInsets.only(right: 10),
       child: OutlinedButton.icon(
         onPressed: () => setState(() => _filter = label),
-        icon: Icon(icon, size: 19),
+        icon: Icon(icon, size: 18),
         label: Text(label),
         style: OutlinedButton.styleFrom(
           backgroundColor: selected ? _blue : const Color(0xFFF5F0EC),
           foregroundColor: selected ? Colors.white : Colors.black87,
           side: BorderSide(
             color: selected ? _blue : const Color(0xFFD8CEC7),
-            width: 1.5,
+            width: 1.4,
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 22),
+          padding: const EdgeInsets.symmetric(horizontal: 18),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(14),
           ),
           textStyle: const TextStyle(
-            fontSize: 16,
+            fontSize: 15,
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -164,6 +165,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
     dynamic currentStaff,
   ) {
     final provider = context.read<RequestProvider>();
+    final isExpanded = _expandedRequests.contains(req.id);
     final isAssignedToMe = req.staffId == currentStaff?.id;
     final status = req.status;
     final statusData = _statusStyle(status);
@@ -196,14 +198,10 @@ class _StaffDashboardState extends State<StaffDashboard> {
       if (status == 'Requested') {
         await provider.updateRequestStatus(req.id, 'Assigned');
       } else if (status == 'Assigned' && !isAssignedToMe) {
-        // Any approved staff member can take an unstarted assignment.
-        // updateRequestStatus records this staff member as the assignee.
         await provider.updateRequestStatus(req.id, 'Assigned');
       } else if (status == 'Assigned' && isAssignedToMe) {
         await provider.updateRequestStatus(req.id, 'Assisting');
       } else if (status == 'Assisting' && !isAssignedToMe) {
-        // Transfer the active request to the staff member who takes over,
-        // then keep it in the assisting state.
         await provider.updateRequestStatus(req.id, 'Assigned');
         await provider.updateRequestStatus(req.id, 'Assisting');
       } else if (status == 'Assisting' && isAssignedToMe) {
@@ -212,166 +210,225 @@ class _StaffDashboardState extends State<StaffDashboard> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: _surface,
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(19),
         border: Border.all(
           color: status == 'Completed' ? _blue : const Color(0xFFFFC978),
-          width: status == 'Completed' ? 2.5 : 1.5,
+          width: status == 'Completed' ? 2 : 1.2,
         ),
         boxShadow: const [
           BoxShadow(
-            blurRadius: 8,
-            offset: Offset(0, 3),
-            color: Color(0x22000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+            color: Color(0x18000000),
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(28, 22, 28, 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(19),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(19),
+          onTap: () {
+            setState(() {
+              if (isExpanded) {
+                _expandedRequests.remove(req.id);
+              } else {
+                _expandedRequests.add(req.id);
+              }
+            });
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 15, 18, 15),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Flexible(
-                  flex: 4,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 9,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusData.color,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(statusData.icon, color: Colors.white, size: 18),
-                        const SizedBox(width: 8),
-                        Flexible(
-                          child: Text(
-                            status.toUpperCase(),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
+                Row(
+                  children: [
+                    Container(
+                      constraints: const BoxConstraints(maxWidth: 125),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusData.color,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(statusData.icon, color: Colors.white, size: 16),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              status.toUpperCase(),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'PNR: ${req.pnr}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: const Icon(Icons.keyboard_arrow_down, size: 25),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 14),
-                Expanded(
-                  flex: 5,
-                  child: Text(
-                    'PNR: ${req.pnr}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    const Icon(Icons.person, color: _blue, size: 21),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
+                    Text(
+                      req.trainNo.isEmpty ? 'Train' : req.trainNo,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeInOut,
+                  alignment: Alignment.topCenter,
+                  child: isExpanded
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Divider(height: 22),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _infoTile(
+                                    Icons.phone,
+                                    req.passengerPhone.isEmpty
+                                        ? 'No phone'
+                                        : req.passengerPhone,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _infoTile(
+                                    Icons.meeting_room,
+                                    'Coach: ${req.coach}',
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 9,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0EEF7),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFFD6D1E1),
+                                ),
+                              ),
+                              child: Text(
+                                assistance,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ),
+                            if (req.staffName != null &&
+                                req.staffName!.isNotEmpty) ...[
+                              const SizedBox(height: 9),
+                              Text(
+                                status == 'Completed'
+                                    ? 'Done by: ${req.staffName}'
+                                    : 'Assigned to: ${req.staffName}',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                            if (canAct) ...[
+                              const Divider(height: 25),
+                              SizedBox(
+                                width: double.infinity,
+                                child: ElevatedButton.icon(
+                                  onPressed: provider.isLoading
+                                      ? null
+                                      : handleAction,
+                                  icon: Icon(actionIcon, size: 19),
+                                  label: Text(actionLabel),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _blue,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor:
+                                        Colors.grey.shade300,
+                                    disabledForegroundColor:
+                                        Colors.grey.shade700,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 13,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        )
+                      : const SizedBox.shrink(),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  isExpanded ? 'Tap to collapse' : 'Tap for request details',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade600,
                   ),
                 ),
               ],
             ),
-            const Divider(height: 26),
-            Row(
-              children: [
-                const Icon(Icons.person, color: _blue, size: 23),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Text(
-                    req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 19,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-                const Icon(Icons.phone, color: Colors.grey, size: 22),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    req.passengerPhone.isEmpty ? 'No phone' : req.passengerPhone,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 17),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: _infoTile(
-                    Icons.train,
-                    req.trainNo.isEmpty ? 'Train' : req.trainNo,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _infoTile(Icons.meeting_room, 'Coach: ${req.coach}'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF0EEF7),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD6D1E1)),
-              ),
-              child: Text(
-                assistance,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 15, color: Colors.black87),
-              ),
-            ),
-            if (req.staffName != null && req.staffName!.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                status == 'Completed'
-                    ? 'Done by: ${req.staffName}'
-                    : 'Assigned to: ${req.staffName}',
-                style: const TextStyle(color: Colors.grey, fontSize: 14),
-              ),
-            ],
-            if (canAct) ...[
-              const Divider(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: provider.isLoading ? null : handleAction,
-                  icon: Icon(actionIcon),
-                  label: Text(actionLabel),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _blue,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey.shade300,
-                    disabledForegroundColor: Colors.grey.shade700,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -379,22 +436,22 @@ class _StaffDashboardState extends State<StaffDashboard> {
 
   Widget _infoTile(IconData icon, String text) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
       decoration: BoxDecoration(
         color: const Color(0xFFF1F1F1),
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(9),
       ),
       child: Row(
         children: [
-          Icon(icon, color: Colors.grey.shade600, size: 20),
-          const SizedBox(width: 9),
+          Icon(icon, color: Colors.grey.shade600, size: 18),
+          const SizedBox(width: 7),
           Expanded(
             child: Text(
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
               ),
             ),
