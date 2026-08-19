@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -56,21 +57,31 @@ class _SignupScreenState extends State<SignupScreen> {
         );
         return;
       }
+
+      // createUserWithEmailAndPassword already signs the user in. Do not call
+      // login() again: that second Firebase sign-in was causing the signup
+      // screen to keep spinning and could also overwrite the fresh session.
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      if (firebaseUser == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Account was created, but the session could not be started. Please log in.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       await provider.completePassengerSignupSession(UserProfile(
-        id: '',
+        id: firebaseUser.uid,
         name: _nameController.text.trim(),
         username: _usernameController.text.trim().toLowerCase(),
         email: _emailController.text.trim().toLowerCase(),
         phone: _phoneController.text.trim().replaceAll(RegExp(r'[\s-]'), ''),
         role: UserRole.passenger,
       ));
-      // Replace the temporary profile with the authenticated Firebase UID.
-      final success = await provider.login(_emailController.text.trim(), _passwordController.text, false);
+
       if (!mounted) return;
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Account was created, but automatic sign-in failed. Please log in.')));
-        return;
-      }
       Navigator.of(context).pop();
     } finally {
       if (mounted) setState(() => _isCompleting = false);
@@ -81,51 +92,71 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     final isLoading = context.watch<RequestProvider>().isLoading || _isCompleting;
     final primaryColor = Colors.orange.shade800;
-    InputDecoration deco(String label, IconData icon) => InputDecoration(labelText: label, prefixIcon: Icon(icon), border: const OutlineInputBorder());
+    InputDecoration deco(String label, IconData icon) => InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon),
+          border: const OutlineInputBorder(),
+        );
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Passenger Account', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), backgroundColor: primaryColor, foregroundColor: Colors.white, centerTitle: true),
-      body: Center(child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 500), child: Card(
-          elevation: 4,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(padding: const EdgeInsets.all(24), child: Form(
-            key: _formKey,
-            child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-              const Text('Join RailSahayak', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 8),
-              const Text('Create a passenger account to request railway assistance.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
-              const SizedBox(height: 24),
-              TextFormField(controller: _nameController, enabled: !isLoading, decoration: deco('Full Name', Icons.person_outline), validator: (v) => v == null || v.trim().isEmpty ? 'Please enter your name' : null),
-              const SizedBox(height: 16),
-              TextFormField(controller: _usernameController, enabled: !isLoading, decoration: deco('Username', Icons.alternate_email), validator: (v) { final x = v?.trim() ?? ''; return x.length < 3 ? 'Username must be at least 3 characters' : (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(x) ? 'Use only letters, numbers and _' : null); }),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _emailController,
-                enabled: !isLoading,
-                keyboardType: TextInputType.emailAddress,
-                decoration: deco('Email', Icons.email_outlined),
-                validator: (v) {
-                  final email = v?.trim() ?? '';
-                  if (email.isEmpty) return 'Enter your email address';
-                  final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
-                  return emailRegex.hasMatch(email) ? null : 'Enter a valid email address';
-                },
+      appBar: AppBar(
+        title: const Text('Create Passenger Account', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        centerTitle: true,
+      ),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: Card(
+              elevation: 4,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text('Join RailSahayak', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      const Text('Create a passenger account to request railway assistance.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)),
+                      const SizedBox(height: 24),
+                      TextFormField(controller: _nameController, enabled: !isLoading, decoration: deco('Full Name', Icons.person_outline), validator: (v) => v == null || v.trim().isEmpty ? 'Please enter your name' : null),
+                      const SizedBox(height: 16),
+                      TextFormField(controller: _usernameController, enabled: !isLoading, decoration: deco('Username', Icons.alternate_email), validator: (v) { final x = v?.trim() ?? ''; return x.length < 3 ? 'Username must be at least 3 characters' : (!RegExp(r'^[a-zA-Z0-9_]+$').hasMatch(x) ? 'Use only letters, numbers and _' : null); }),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _emailController,
+                        enabled: !isLoading,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: deco('Email', Icons.email_outlined),
+                        validator: (v) {
+                          final email = v?.trim() ?? '';
+                          if (email.isEmpty) return 'Enter your email address';
+                          final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+                          return emailRegex.hasMatch(email) ? null : 'Enter a valid email address';
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(controller: _phoneController, enabled: !isLoading, keyboardType: TextInputType.phone, decoration: deco('Phone Number', Icons.phone_outlined), validator: (v) => RegExp(r'^[0-9]{10}$').hasMatch((v ?? '').replaceAll(RegExp(r'[\s-]'), '')) ? null : 'Enter a valid 10-digit phone number'),
+                      const SizedBox(height: 16),
+                      TextFormField(controller: _passwordController, enabled: !isLoading, obscureText: _obscurePassword, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off), onPressed: () => setState(() => _obscurePassword = !_obscurePassword)), border: const OutlineInputBorder()), validator: (v) => v == null || v.length < 6 ? 'Password must be at least 6 characters' : null),
+                      const SizedBox(height: 16),
+                      TextFormField(controller: _confirmPasswordController, enabled: !isLoading, obscureText: _obscureConfirmPassword, decoration: InputDecoration(labelText: 'Confirm Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off), onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword)), border: const OutlineInputBorder()), validator: (v) => v != _passwordController.text ? 'Passwords do not match' : null),
+                      const SizedBox(height: 24),
+                      SizedBox(height: 52, child: ElevatedButton(onPressed: isLoading ? null : _handleSignup, style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white), child: _isCompleting ? const CircularProgressIndicator(color: Colors.white) : const Text('Create Passenger Account', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)))),
+                      const SizedBox(height: 12),
+                      const Text('Railway staff accounts require separate authorization and are not created here.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    ],
+                  ),
+                ),
               ),
-              const SizedBox(height: 16),
-              TextFormField(controller: _phoneController, enabled: !isLoading, keyboardType: TextInputType.phone, decoration: deco('Phone Number', Icons.phone_outlined), validator: (v) => RegExp(r'^[0-9]{10}$').hasMatch((v ?? '').replaceAll(RegExp(r'[\s-]'), '')) ? null : 'Enter a valid 10-digit phone number'),
-              const SizedBox(height: 16),
-              TextFormField(controller: _passwordController, enabled: !isLoading, obscureText: _obscurePassword, decoration: InputDecoration(labelText: 'Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(icon: Icon(_obscurePassword ? Icons.visibility : Icons.visibility_off), onPressed: () => setState(() => _obscurePassword = !_obscurePassword),), border: const OutlineInputBorder()), validator: (v) => v == null || v.length < 6 ? 'Password must be at least 6 characters' : null),
-              const SizedBox(height: 16),
-              TextFormField(controller: _confirmPasswordController, enabled: !isLoading, obscureText: _obscureConfirmPassword, decoration: InputDecoration(labelText: 'Confirm Password', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(icon: Icon(_obscureConfirmPassword ? Icons.visibility : Icons.visibility_off), onPressed: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),), border: const OutlineInputBorder()), validator: (v) => v != _passwordController.text ? 'Passwords do not match' : null),
-              const SizedBox(height: 24),
-              SizedBox(height: 52, child: ElevatedButton(onPressed: isLoading ? null : _handleSignup, style: ElevatedButton.styleFrom(backgroundColor: primaryColor, foregroundColor: Colors.white), child: _isCompleting ? const CircularProgressIndicator(color: Colors.white) : const Text('Create Passenger Account', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)))),
-              const SizedBox(height: 12),
-              const Text('Railway staff accounts require separate authorization and are not created here.', textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.grey)),
-            ]),
-          )),
-        )),
-      )),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
