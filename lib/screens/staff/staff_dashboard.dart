@@ -216,17 +216,25 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     const Icon(Icons.person, color: _blue, size: 21),
                     const SizedBox(width: 9),
                     Expanded(
-                      flex: 5,
-                      child: Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      flex: 4,
                       child: Text(
-                        req.trainNo.isEmpty ? 'Train' : req.trainNo,
+                        req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.train, color: _blue, size: 20),
+                    const SizedBox(width: 9),
+                    Expanded(
+                      child: Text(
+                        req.trainNo.isEmpty ? 'Train' : req.trainNo,
+                        softWrap: true,
                         style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600),
                       ),
                     ),
