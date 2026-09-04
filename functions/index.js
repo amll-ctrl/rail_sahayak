@@ -145,3 +145,52 @@ exports.notifyPassengerOfRequestStatus = onDocumentUpdated('requests/{requestId}
     },
   });
 });
+
+// Server-side adapter for live/scheduled train information.
+// The external provider key is kept out of the mobile APK. Configure:
+// RAILRADAR_API_KEY=...
+// RAILRADAR_API_BASE_URL=https://api.railradar.in/v1
+exports.getTrainInfo = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Please sign in to view train information.');
+  }
+
+  const trainNumber = String(request.data?.trainNumber || '').replace(/\D/g, '');
+  if (!/^\d{5}$/.test(trainNumber)) {
+    throw new HttpsError('invalid-argument', 'A valid 5-digit train number is required.');
+  }
+
+  const apiKey = String(process.env.RAILRADAR_API_KEY || '').trim();
+  const baseUrl = String(process.env.RAILRADAR_API_BASE_URL || 'https://api.railradar.in/v1').replace(/\/$/, '');
+  if (!apiKey) {
+    throw new HttpsError('failed-precondition', 'Live train data is not configured yet.');
+  }
+
+  const url = `${baseUrl}/legacy/trains/${trainNumber}?dataType=full`;
+  try {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      logger.warn('Train data provider returned an error', { status: response.status, trainNumber });
+      if (response.status === 404) throw new HttpsError('not-found', 'Train information was not found.');
+      if (response.status === 429) throw new HttpsError('resource-exhausted', 'Train data is temporarily rate limited.');
+      throw new HttpsError('unavailable', 'Train information is temporarily unavailable.');
+    }
+
+    const payload = await response.json();
+    if (!payload?.success || !payload?.data) {
+      throw new HttpsError('not-found', 'Train information was not found.');
+    }
+
+    return payload.data;
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error('Train information lookup failed', { error, trainNumber });
+    throw new HttpsError('unavailable', 'Unable to retrieve train information right now.');
+  }
+});
