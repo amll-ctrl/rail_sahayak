@@ -215,25 +215,12 @@ class RequestProvider extends ChangeNotifier {
         return false;
       }
       final email = (googleUser.email).trim().toLowerCase();
-      final googleName = (googleUser.displayName).trim();
-
-      // Staff access is based on the approved staff record for the Google email,
-      // not on a pre-existing Firebase Auth provider for the same UID.
+      final googleName = (googleUser.displayName ?? '').trim();
+      // Staff access is based on the approved staff record for the Google email.
       if (isStaff) {
-        final approvedSnapshot = await _firestore
-            .collection('users')
-            .where('email', isEqualTo: email)
-            .where('role', isEqualTo: 'staff')
-            .where('status', isEqualTo: 'approved')
-            .limit(1)
-            .get();
+        final approvedSnapshot = await _firestore.collection('users').where('email', isEqualTo: email).where('role', isEqualTo: 'staff').where('status', isEqualTo: 'approved').limit(1).get();
         if (approvedSnapshot.docs.isEmpty) {
-          final requestSnapshot = await _firestore
-              .collection('staff_requests')
-              .where('email', isEqualTo: email)
-              .where('status', isEqualTo: 'approved')
-              .limit(1)
-              .get();
+          final requestSnapshot = await _firestore.collection('staff_requests').where('email', isEqualTo: email).where('status', isEqualTo: 'approved').limit(1).get();
           if (requestSnapshot.docs.isEmpty) {
             await _googleSignIn.signOut();
             _lastLoginError = 'This Google account is not approved for Railway Staff access.';
@@ -241,16 +228,12 @@ class RequestProvider extends ChangeNotifier {
           }
         }
       }
-
-      final credential = await _auth.signInWithCredential(
-        GoogleAuthProvider.credential(idToken: idToken),
-      );
+      final credential = await _auth.signInWithCredential(GoogleAuthProvider.credential(idToken: idToken));
       final user = credential.user;
       if (user == null) {
         _lastLoginError = 'Firebase did not return a Google user account.';
         return false;
       }
-
       final ref = _firestore.collection('users').doc(user.uid);
       final doc = await ref.get();
       if (doc.exists && doc.data() != null) {
@@ -260,9 +243,7 @@ class RequestProvider extends ChangeNotifier {
         final hydratedEmail = profile.email.trim().isEmpty ? email : profile.email;
         if (profile.role == UserRole.admin) { _currentUser = profile; _needsProfileCompletion = false; await _startRequestListener(); await refreshAdminData(); return true; }
         if (isStaff) {
-          if (profile.role != UserRole.staff) {
-            await ref.set({'role': 'staff', 'status': 'approved', 'email': email}, SetOptions(merge: true));
-          }
+          if (profile.role != UserRole.staff) await ref.set({'role': 'staff', 'status': 'approved', 'email': email}, SetOptions(merge: true));
           _currentUser = UserProfile(id: profile.id, name: hydratedName, username: profile.username, email: hydratedEmail, phone: profile.phone, role: UserRole.staff, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance);
           _needsProfileCompletion = false;
           _clearPendingGoogleProfile();
@@ -278,6 +259,7 @@ class RequestProvider extends ChangeNotifier {
         _currentUser = UserProfile(id: user.uid, name: googleName.isEmpty ? 'Railway Staff' : googleName, username: email.split('@').first.toLowerCase(), email: email, phone: '', role: UserRole.staff);
         await ref.set({..._currentUser!.toMap(), 'status': 'approved'});
         _needsProfileCompletion = false;
+        _clearPendingGoogleProfile();
         await _startRequestListener();
         return true;
       }
@@ -305,3 +287,37 @@ class RequestProvider extends ChangeNotifier {
     catch (e) { debugPrint('Submit request error: $e'); return false; }
     finally { _isLoading = false; notifyListeners(); }
   }
+
+  Future<void> updateRequestStatus(String requestId, String status) async {
+    final data = <String, dynamic>{'status': status};
+    final user = _currentUser;
+    if (user != null && user.role == UserRole.staff && status == 'Assigned') {
+      data['staffId'] = user.id;
+      data['staffName'] = user.name;
+    }
+    await _firestore.collection('requests').doc(requestId).update(data);
+  }
+
+  Future<void> logout() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      await _stopRequestListener();
+      await _auth.signOut();
+      try { await _googleSignIn.signOut(); } catch (_) {}
+      _currentUser = null;
+      _needsProfileCompletion = false;
+      _clearPendingGoogleProfile();
+      _adminStaffCandidates.clear();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  @override
+  void dispose() {
+    _requestsSubscription?.cancel();
+    super.dispose();
+  }
+}
