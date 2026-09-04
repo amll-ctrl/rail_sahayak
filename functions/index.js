@@ -4,6 +4,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 
 initializeApp();
@@ -11,6 +12,7 @@ initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 const messaging = getMessaging();
+const railRadarApiKey = defineSecret('RAILRADAR_API_KEY');
 
 function cleanTokens(tokens) {
   return [...new Set(tokens.filter((token) => typeof token === 'string' && token.trim()))];
@@ -22,79 +24,44 @@ async function sendToTokens(tokens, title, body, data) {
     logger.info('No FCM tokens available for notification.');
     return;
   }
-
   const response = await messaging.sendEachForMulticast({
     tokens: cleanedTokens,
     notification: { title, body },
     data,
-    android: {
-      priority: 'high',
-      notification: { channelId: 'rail_sahayak_notifications', sound: 'default' },
-    },
+    android: { priority: 'high', notification: { channelId: 'rail_sahayak_notifications', sound: 'default' } },
   });
-
-  logger.info('FCM notification result', {
-    successCount: response.successCount,
-    failureCount: response.failureCount,
-  });
+  logger.info('FCM notification result', { successCount: response.successCount, failureCount: response.failureCount });
 }
 
-// Only an authenticated RailSahayak administrator can create staff accounts.
-// Passwords are sent to Firebase Auth and are never written to Firestore.
 exports.createStaffAccount = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Please sign in as an administrator.');
-  }
-
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in as an administrator.');
   const adminDoc = await db.collection('users').doc(request.auth.uid).get();
   if (!adminDoc.exists || String(adminDoc.data()?.role || '').toLowerCase() !== 'admin') {
     throw new HttpsError('permission-denied', 'Only administrators can create staff accounts.');
   }
-
   const data = request.data || {};
   const name = String(data.name || '').trim();
   const email = String(data.email || '').trim().toLowerCase();
   const password = String(data.password || '');
   const phone = String(data.phone || '').trim();
-
-  if (name.length < 2) {
-    throw new HttpsError('invalid-argument', 'Enter the staff member’s name.');
-  }
-  if (!/^\S+@\S+\.\S+$/.test(email)) {
-    throw new HttpsError('invalid-argument', 'Enter a valid company email address.');
-  }
-  if (password.length < 6) {
-    throw new HttpsError('invalid-argument', 'Temporary password must contain at least 6 characters.');
-  }
+  if (name.length < 2) throw new HttpsError('invalid-argument', 'Enter the staff member’s name.');
+  if (!/^\S+@\S+\.\S+$/.test(email)) throw new HttpsError('invalid-argument', 'Enter a valid company email address.');
+  if (password.length < 6) throw new HttpsError('invalid-argument', 'Temporary password must contain at least 6 characters.');
 
   let userRecord;
   try {
-    userRecord = await auth.createUser({
-      email,
-      password,
-      displayName: name,
-    });
+    userRecord = await auth.createUser({ email, password, displayName: name });
   } catch (error) {
-    if (error?.code === 'auth/email-already-exists') {
-      throw new HttpsError('already-exists', 'A Firebase account already exists for this email.');
-    }
+    if (error?.code === 'auth/email-already-exists') throw new HttpsError('already-exists', 'A Firebase account already exists for this email.');
     logger.error('Could not create staff account', error);
     throw new HttpsError('internal', 'Could not create the staff account.');
   }
 
   await db.collection('users').doc(userRecord.uid).set({
-    name,
-    username: '',
-    email,
-    phone,
-    role: 'staff',
-    status: 'approved',
-    createdBy: request.auth.uid,
-    createdAt: FieldValue.serverTimestamp(),
-    disabilityType: null,
-    preferredAssistance: null,
+    name, username: '', email, phone, role: 'staff', status: 'approved',
+    createdBy: request.auth.uid, createdAt: FieldValue.serverTimestamp(),
+    disabilityType: null, preferredAssistance: null,
   });
-
   return { uid: userRecord.uid, email, role: 'staff', status: 'approved' };
 });
 
@@ -103,17 +70,13 @@ exports.notifyStaffOfNewRequest = onDocumentCreated('requests/{requestId}', asyn
   if (!snapshot) return;
   const request = snapshot.data();
   if (!request) return;
-
   const staffSnapshot = await db.collection('users').where('role', '==', 'staff').get();
   const staffTokens = staffSnapshot.docs.map((doc) => doc.data().fcmToken).filter(Boolean);
   const train = request.trainNo || 'your train';
   const coach = request.coach || 'coach not specified';
   const passenger = request.passengerName || 'A passenger';
-
   await sendToTokens(staffTokens, 'New Assistance Request', `${passenger} needs assistance on ${train}, ${coach}.`, {
-    type: 'new_assistance_request',
-    requestId: event.params.requestId,
-    status: String(request.status || 'Requested'),
+    type: 'new_assistance_request', requestId: event.params.requestId, status: String(request.status || 'Requested'),
   });
 });
 
@@ -121,72 +84,46 @@ exports.notifyPassengerOfRequestStatus = onDocumentUpdated('requests/{requestId}
   const before = event.data?.before.data();
   const after = event.data?.after.data();
   if (!before || !after || before.status === after.status) return;
-
   const passengerId = after.passengerId;
   if (!passengerId) return;
   const passengerDoc = await db.collection('users').doc(passengerId).get();
   if (!passengerDoc.exists) return;
   const token = passengerDoc.data()?.fcmToken;
   if (!token) return;
-
   const status = String(after.status || 'Updated');
   const staffName = String(after.staffName || 'Railway staff');
   let body = `Your assistance request is now ${status}.`;
   if (status.toLowerCase() === 'assigned') body = `${staffName} has been assigned to assist you.`;
   if (status.toLowerCase() === 'completed') body = 'Your assistance request has been completed.';
-
   await messaging.send({
     token,
     notification: { title: 'RailSahayak Request Update', body },
     data: { type: 'request_status_update', requestId: event.params.requestId, status },
-    android: {
-      priority: 'high',
-      notification: { channelId: 'rail_sahayak_notifications', sound: 'default' },
-    },
+    android: { priority: 'high', notification: { channelId: 'rail_sahayak_notifications', sound: 'default' } },
   });
 });
 
-// Server-side adapter for live/scheduled train information.
-// The external provider key is kept out of the mobile APK. Configure:
-// RAILRADAR_API_KEY=...
-// RAILRADAR_API_BASE_URL=https://api.railradar.in/v1
-exports.getTrainInfo = onCall(async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Please sign in to view train information.');
-  }
-
+exports.getTrainInfo = onCall({ secrets: [railRadarApiKey] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in to view train information.');
   const trainNumber = String(request.data?.trainNumber || '').replace(/\D/g, '');
-  if (!/^\d{5}$/.test(trainNumber)) {
-    throw new HttpsError('invalid-argument', 'A valid 5-digit train number is required.');
-  }
+  if (!/^\d{5}$/.test(trainNumber)) throw new HttpsError('invalid-argument', 'A valid 5-digit train number is required.');
 
-  const apiKey = String(process.env.RAILRADAR_API_KEY || '').trim();
+  const apiKey = railRadarApiKey.value().trim();
   const baseUrl = String(process.env.RAILRADAR_API_BASE_URL || 'https://api.railradar.in/v1').replace(/\/$/, '');
-  if (!apiKey) {
-    throw new HttpsError('failed-precondition', 'Live train data is not configured yet.');
-  }
+  if (!apiKey) throw new HttpsError('failed-precondition', 'Live train data is not configured yet.');
 
-  const url = `${baseUrl}/legacy/trains/${trainNumber}?dataType=full`;
   try {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        Accept: 'application/json',
-      },
+    const response = await fetch(`${baseUrl}/legacy/trains/${trainNumber}?dataType=full`, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
     });
-
     if (!response.ok) {
       logger.warn('Train data provider returned an error', { status: response.status, trainNumber });
       if (response.status === 404) throw new HttpsError('not-found', 'Train information was not found.');
       if (response.status === 429) throw new HttpsError('resource-exhausted', 'Train data is temporarily rate limited.');
       throw new HttpsError('unavailable', 'Train information is temporarily unavailable.');
     }
-
     const payload = await response.json();
-    if (!payload?.success || !payload?.data) {
-      throw new HttpsError('not-found', 'Train information was not found.');
-    }
-
+    if (!payload?.success || !payload?.data) throw new HttpsError('not-found', 'Train information was not found.');
     return payload.data;
   } catch (error) {
     if (error instanceof HttpsError) throw error;
