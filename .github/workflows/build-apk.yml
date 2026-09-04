@@ -5,6 +5,10 @@ on:
   push:
     branches:
       - fix/signup-email-validator
+      - feat/train-info-accessible-travel
+  pull_request:
+    branches:
+      - fix/signup-email-validator
 
 jobs:
   build-apk:
