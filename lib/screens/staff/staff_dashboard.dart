@@ -222,13 +222,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     const SizedBox(width: 10),
                     Expanded(
                       flex: 4,
-                      child: Text(
-                        req.trainNo.isEmpty ? 'Train' : req.trainNo,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600),
-                      ),
+                      child: Text(req.trainNo.isEmpty ? 'Train' : req.trainNo, maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right, style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w600)),
                     ),
                   ],
                 ),
@@ -255,6 +249,32 @@ class _StaffDashboardState extends State<StaffDashboard> {
                               decoration: BoxDecoration(color: const Color(0xFFF0EEF7), borderRadius: BorderRadius.circular(10), border: Border.all(color: const Color(0xFFD6D1E1))),
                               child: Text(assistance, style: const TextStyle(fontSize: 14, color: Colors.black87)),
                             ),
+                            if (req.upgradeRequested || req.travelClass != 'Not specified') ...[
+                              const SizedBox(height: 10),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                                decoration: BoxDecoration(
+                                  color: req.upgradeRequested ? const Color(0xFFFFF3E0) : const Color(0xFFF4F4F4),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: req.upgradeRequested ? const Color(0xFFFFCC80) : const Color(0xFFE0E0E0)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(req.upgradeRequested ? Icons.upgrade : Icons.airline_seat_recline_normal, color: req.upgradeRequested ? Colors.deepOrange : Colors.grey.shade700),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        req.upgradeRequested
+                                            ? 'Full fare / higher class requested • ${req.travelClass}'
+                                            : 'Travel class: ${req.travelClass}',
+                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                             if (req.staffName != null && req.staffName!.isNotEmpty) ...[
                               const SizedBox(height: 9),
                               Text(status == 'Completed' ? 'Done by: ${req.staffName}' : 'Assigned to: ${req.staffName}', style: const TextStyle(color: Colors.grey, fontSize: 13)),
