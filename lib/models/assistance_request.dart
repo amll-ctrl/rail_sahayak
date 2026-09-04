@@ -4,16 +4,20 @@ class AssistanceRequest {
   final String id;
   final String pnr;
   final String trainNo;
+  final String trainNumber;
   final String coach;
   final String passengerId;
   final String passengerName;
   final String passengerPhone;
-  final String status; // Requested, Assigned, Assisting, Completed, Cancelled
-  final List<String> assistanceType; // Wheelchair, Luggage Porter, Guiding Hand, etc.
+  final String status;
+  final List<String> assistanceType;
   final DateTime timestamp;
   final String? staffId;
   final String? staffName;
   final String? notes;
+  final String travelClass;
+  final String farePreference;
+  final bool upgradeRequested;
 
   AssistanceRequest({
     required this.id,
@@ -26,45 +30,58 @@ class AssistanceRequest {
     required this.status,
     required this.assistanceType,
     required this.timestamp,
+    this.trainNumber = '',
     this.staffId,
     this.staffName,
     this.notes,
+    this.travelClass = 'Not specified',
+    this.farePreference = 'concession',
+    this.upgradeRequested = false,
   });
 
-  // Convert Firestore Document to AssistanceRequest object
   factory AssistanceRequest.fromMap(Map<String, dynamic> map, String docId) {
     DateTime parsedTime;
-    var rawTimestamp = map['timestamp'];
+    final rawTimestamp = map['timestamp'];
     if (rawTimestamp is Timestamp) {
       parsedTime = rawTimestamp.toDate();
     } else if (rawTimestamp is String) {
-      parsedTime = DateTime.parse(rawTimestamp);
+      parsedTime = DateTime.tryParse(rawTimestamp) ?? DateTime.now();
     } else {
       parsedTime = DateTime.now();
     }
 
+    final displayTrain = (map['trainNo'] ?? '').toString();
+    final storedNumber = (map['trainNumber'] ?? '').toString();
+    final derivedNumber = storedNumber.isNotEmpty
+        ? storedNumber
+        : RegExp(r'^\d{5}').firstMatch(displayTrain)?.group(0) ?? '';
+
     return AssistanceRequest(
       id: docId,
-      pnr: map['pnr'] ?? '',
-      trainNo: map['trainNo'] ?? '',
-      coach: map['coach'] ?? '',
-      passengerId: map['passengerId'] ?? '',
-      passengerName: map['passengerName'] ?? '',
-      passengerPhone: map['passengerPhone'] ?? '',
-      status: map['status'] ?? 'Requested',
-      assistanceType: List<String>.from(map['assistanceType'] ?? []),
+      pnr: (map['pnr'] ?? '').toString(),
+      trainNo: displayTrain,
+      trainNumber: derivedNumber,
+      coach: (map['coach'] ?? '').toString(),
+      passengerId: (map['passengerId'] ?? '').toString(),
+      passengerName: (map['passengerName'] ?? '').toString(),
+      passengerPhone: (map['passengerPhone'] ?? '').toString(),
+      status: (map['status'] ?? 'Requested').toString(),
+      assistanceType: List<String>.from(map['assistanceType'] ?? const []),
       timestamp: parsedTime,
-      staffId: map['staffId'],
-      staffName: map['staffName'],
-      notes: map['notes'],
+      staffId: map['staffId']?.toString(),
+      staffName: map['staffName']?.toString(),
+      notes: map['notes']?.toString(),
+      travelClass: (map['travelClass'] ?? 'Not specified').toString(),
+      farePreference: (map['farePreference'] ?? 'concession').toString(),
+      upgradeRequested: map['upgradeRequested'] == true,
     );
   }
 
-  // Convert AssistanceRequest to Map for Firestore
   Map<String, dynamic> toMap() {
     return {
       'pnr': pnr,
       'trainNo': trainNo,
+      'trainNumber': trainNumber,
       'coach': coach,
       'passengerId': passengerId,
       'passengerName': passengerName,
@@ -75,19 +92,18 @@ class AssistanceRequest {
       'staffId': staffId,
       'staffName': staffName,
       'notes': notes,
+      'travelClass': travelClass,
+      'farePreference': farePreference,
+      'upgradeRequested': upgradeRequested,
     };
   }
 
-  // Helper method to create a copy of the request with some updated fields
-  AssistanceRequest copyWith({
-    String? status,
-    String? staffId,
-    String? staffName,
-  }) {
+  AssistanceRequest copyWith({String? status, String? staffId, String? staffName}) {
     return AssistanceRequest(
       id: id,
       pnr: pnr,
       trainNo: trainNo,
+      trainNumber: trainNumber,
       coach: coach,
       passengerId: passengerId,
       passengerName: passengerName,
@@ -98,6 +114,9 @@ class AssistanceRequest {
       staffId: staffId ?? this.staffId,
       staffName: staffName ?? this.staffName,
       notes: notes,
+      travelClass: travelClass,
+      farePreference: farePreference,
+      upgradeRequested: upgradeRequested,
     );
   }
 }
