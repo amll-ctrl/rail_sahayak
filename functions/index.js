@@ -4,6 +4,7 @@ const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getMessaging } = require('firebase-admin/messaging');
 const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const { logger } = require('firebase-functions');
 
 initializeApp();
@@ -11,6 +12,7 @@ initializeApp();
 const db = getFirestore();
 const auth = getAuth();
 const messaging = getMessaging();
+const railRadarApiKey = defineSecret('RAILRADAR_API_KEY');
 
 function cleanTokens(tokens) {
   return [...new Set(tokens.filter((token) => typeof token === 'string' && token.trim()))];
@@ -144,4 +146,33 @@ exports.notifyPassengerOfRequestStatus = onDocumentUpdated('requests/{requestId}
       notification: { channelId: 'rail_sahayak_notifications', sound: 'default' },
     },
   });
+});
+
+exports.getTrainInfo = onCall({ secrets: [railRadarApiKey] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Please sign in to view train information.');
+  const trainNumber = String(request.data?.trainNumber || '').replace(/\D/g, '');
+  if (!/^\d{5}$/.test(trainNumber)) throw new HttpsError('invalid-argument', 'A valid 5-digit train number is required.');
+
+  const apiKey = railRadarApiKey.value().trim();
+  const baseUrl = String(process.env.RAILRADAR_API_BASE_URL || 'https://api.railradar.in/v1').replace(/\/$/, '');
+  if (!apiKey) throw new HttpsError('failed-precondition', 'Live train data is not configured yet.');
+
+  try {
+    const response = await fetch(`${baseUrl}/legacy/trains/${trainNumber}?dataType=full`, {
+      headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },
+    });
+    if (!response.ok) {
+      logger.warn('Train data provider returned an error', { status: response.status, trainNumber });
+      if (response.status === 404) throw new HttpsError('not-found', 'Train information was not found.');
+      if (response.status === 429) throw new HttpsError('resource-exhausted', 'Train data is temporarily rate limited.');
+      throw new HttpsError('unavailable', 'Train information is temporarily unavailable.');
+    }
+    const payload = await response.json();
+    if (!payload?.success || !payload?.data) throw new HttpsError('not-found', 'Train information was not found.');
+    return payload.data;
+  } catch (error) {
+    if (error instanceof HttpsError) throw error;
+    logger.error('Train information lookup failed', { error, trainNumber });
+    throw new HttpsError('unavailable', 'Unable to retrieve train information right now.');
+  }
 });
