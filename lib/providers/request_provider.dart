@@ -214,6 +214,34 @@ class RequestProvider extends ChangeNotifier {
         _lastLoginError = 'Google Sign-In returned no ID token.';
         return false;
       }
+      final email = (googleUser.email).trim().toLowerCase();
+      final googleName = (googleUser.displayName).trim();
+
+      // Staff access is based on the approved staff record for the Google email,
+      // not on a pre-existing Firebase Auth provider for the same UID.
+      if (isStaff) {
+        final approvedSnapshot = await _firestore
+            .collection('users')
+            .where('email', isEqualTo: email)
+            .where('role', isEqualTo: 'staff')
+            .where('status', isEqualTo: 'approved')
+            .limit(1)
+            .get();
+        if (approvedSnapshot.docs.isEmpty) {
+          final requestSnapshot = await _firestore
+              .collection('staff_requests')
+              .where('email', isEqualTo: email)
+              .where('status', isEqualTo: 'approved')
+              .limit(1)
+              .get();
+          if (requestSnapshot.docs.isEmpty) {
+            await _googleSignIn.signOut();
+            _lastLoginError = 'This Google account is not approved for Railway Staff access.';
+            return false;
+          }
+        }
+      }
+
       final credential = await _auth.signInWithCredential(
         GoogleAuthProvider.credential(idToken: idToken),
       );
@@ -222,23 +250,37 @@ class RequestProvider extends ChangeNotifier {
         _lastLoginError = 'Firebase did not return a Google user account.';
         return false;
       }
-      final email = (user.email ?? googleUser.email).trim().toLowerCase();
-      final googleName = (user.displayName ?? googleUser.displayName ?? '').trim();
-      if (isStaff && !await _isStaffApproved(email)) { await _auth.signOut(); await _googleSignIn.signOut(); _lastLoginError = 'This Google account is not approved for Railway Staff access.'; return false; }
-      final ref = _firestore.collection('users').doc(user.uid); final doc = await ref.get();
+
+      final ref = _firestore.collection('users').doc(user.uid);
+      final doc = await ref.get();
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         final profile = UserProfile.fromMap(data, user.uid);
         final hydratedName = profile.name.trim().isEmpty ? (googleName.isNotEmpty ? googleName : 'Google User') : profile.name;
         final hydratedEmail = profile.email.trim().isEmpty ? email : profile.email;
         if (profile.role == UserRole.admin) { _currentUser = profile; _needsProfileCompletion = false; await _startRequestListener(); await refreshAdminData(); return true; }
-        if (isStaff) { if (profile.role != UserRole.staff) await ref.set({'role': 'staff', 'status': 'approved'}, SetOptions(merge: true)); _currentUser = UserProfile(id: profile.id, name: hydratedName, username: profile.username, email: hydratedEmail, phone: profile.phone, role: UserRole.staff, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance); _needsProfileCompletion = false; await _startRequestListener(); return true; }
+        if (isStaff) {
+          if (profile.role != UserRole.staff) {
+            await ref.set({'role': 'staff', 'status': 'approved', 'email': email}, SetOptions(merge: true));
+          }
+          _currentUser = UserProfile(id: profile.id, name: hydratedName, username: profile.username, email: hydratedEmail, phone: profile.phone, role: UserRole.staff, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance);
+          _needsProfileCompletion = false;
+          _clearPendingGoogleProfile();
+          await _startRequestListener();
+          return true;
+        }
         if (profile.role != UserRole.passenger) { await _auth.signOut(); await _googleSignIn.signOut(); _lastLoginError = 'This account is not registered as a passenger.'; return false; }
         _currentUser = UserProfile(id: profile.id, name: hydratedName, username: profile.username, email: hydratedEmail, phone: profile.phone, role: UserRole.passenger, disabilityType: profile.disabilityType, preferredAssistance: profile.preferredAssistance);
         if (profile.name.trim().isEmpty || profile.email.trim().isEmpty) await ref.set({'name': hydratedName, 'email': hydratedEmail, 'role': 'passenger'}, SetOptions(merge: true));
         _needsProfileCompletion = _isProfileIncomplete(_currentUser!); if (!_needsProfileCompletion) await _startRequestListener(); return true;
       }
-      if (isStaff) { _currentUser = UserProfile(id: user.uid, name: googleName.isEmpty ? 'Railway Staff' : googleName, username: '', email: email, phone: '', role: UserRole.staff); await ref.set({..._currentUser!.toMap(), 'status': 'approved'}); _needsProfileCompletion = false; await _startRequestListener(); return true; }
+      if (isStaff) {
+        _currentUser = UserProfile(id: user.uid, name: googleName.isEmpty ? 'Railway Staff' : googleName, username: email.split('@').first.toLowerCase(), email: email, phone: '', role: UserRole.staff);
+        await ref.set({..._currentUser!.toMap(), 'status': 'approved'});
+        _needsProfileCompletion = false;
+        await _startRequestListener();
+        return true;
+      }
       final name = googleName.isEmpty ? 'Google User' : googleName;
       _currentUser = UserProfile(id: user.uid, name: name, username: '', email: email, phone: '', role: UserRole.passenger); _pendingGoogleUser = user; _pendingGoogleName = name; _pendingGoogleEmail = email; _needsProfileCompletion = true; return true;
     } on GoogleSignInException catch (e) {
