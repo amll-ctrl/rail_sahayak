@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - fix/signup-email-validator
+      - main
 
 jobs:
   build-apk:
@@ -18,6 +19,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: '3.32.8'
           cache: true
 
       - name: Flutter version
