@@ -57,12 +57,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (!mounted) return;
     if (!success) {
+      final message = provider.lastLoginError ??
+          (_isStaff
+              ? 'Google staff login is only available for an already approved staff account.'
+              : 'Google sign-in failed. Please try again.');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(_isStaff
-              ? 'Google staff login is only available for an already approved staff account.'
-              : 'Google sign-in failed. Please try again.'),
+          content: Text(message),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 8),
         ),
       );
     }
