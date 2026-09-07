@@ -146,7 +146,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
     final expanded = _expandedRequests.contains(req.id);
     final status = req.status;
     final statusData = _statusStyle(status);
-    final terminal = status == 'Completed' || status == 'Cancelled';
+    final terminal = status == 'Completed' || status == 'Cancelled' || status == 'Escalated';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -254,19 +254,27 @@ class _StaffDashboardState extends State<StaffDashboard> {
                               const SizedBox(height: 8),
                               Text('Passenger: ${req.passengerPhone}', style: const TextStyle(fontWeight: FontWeight.w600)),
                             ],
-                            const SizedBox(height: 12),
-                            if (!terminal) _actionButton(context, req),
-                            if (!terminal && (status == 'At Station' || status == 'Assigned')) ...[
-                              const SizedBox(height: 8),
-                              OutlinedButton.icon(
-                                onPressed: () => _escalate(context, req),
-                                icon: const Icon(Icons.warning_amber),
-                                label: const Text('Escalate to supervisor'),
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: Colors.deepOrange,
-                                  minimumSize: const Size(double.infinity, 44),
-                                ),
+                            if (status == 'Escalated') ...[
+                              const SizedBox(height: 12),
+                              const Text(
+                                'Escalated to supervisor. Awaiting further action.',
+                                style: TextStyle(fontWeight: FontWeight.w600, color: Colors.deepOrange),
                               ),
+                            ] else if (!terminal) ...[
+                              const SizedBox(height: 12),
+                              _actionButton(context, req),
+                              if (status == 'At Station' || status == 'Assigned') ...[
+                                const SizedBox(height: 8),
+                                OutlinedButton.icon(
+                                  onPressed: () => _escalate(context, req),
+                                  icon: const Icon(Icons.warning_amber),
+                                  label: const Text('Escalate to supervisor'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.deepOrange,
+                                    minimumSize: const Size(double.infinity, 44),
+                                  ),
+                                ),
+                              ],
                             ],
                           ],
                         )
