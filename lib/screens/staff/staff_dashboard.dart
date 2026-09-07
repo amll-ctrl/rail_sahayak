@@ -166,8 +166,10 @@ class _StaffDashboardState extends State<StaffDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
+                      constraints: const BoxConstraints(maxWidth: 150),
                       padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
                       decoration: BoxDecoration(color: statusData.color, borderRadius: BorderRadius.circular(10)),
                       child: Row(
@@ -175,9 +177,13 @@ class _StaffDashboardState extends State<StaffDashboard> {
                         children: [
                           Icon(statusData.icon, color: Colors.white, size: 16),
                           const SizedBox(width: 6),
-                          Text(
-                            status.toUpperCase(),
-                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                          Flexible(
+                            child: Text(
+                              status.toUpperCase(),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12),
+                            ),
                           ),
                         ],
                       ),
@@ -186,14 +192,22 @@ class _StaffDashboardState extends State<StaffDashboard> {
                     Expanded(
                       child: Text(
                         req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
                       ),
                     ),
-                    Text(
-                      req.trainNo.isEmpty ? 'Train' : req.trainNo,
-                      style: const TextStyle(fontSize: 13, color: Colors.black54, fontWeight: FontWeight.w600),
-                    ),
                   ],
+                ),
+                const SizedBox(height: 4),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    req.trainNo.isEmpty ? 'Train' : req.trainNo,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 13, color: Colors.black54, fontWeight: FontWeight.w600),
+                  ),
                 ),
                 const SizedBox(height: 9),
                 Text(
@@ -377,7 +391,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
       case 'Boarding':
         return (color: Colors.indigo, icon: Icons.directions_walk);
       case 'Boarded':
-        return (color: Colors.green.shade700, icon: Icons.check_circle);
+        return (color: Colors.green, icon: Icons.check_circle);
       case 'Completed':
         return (color: Colors.green.shade800, icon: Icons.done_all);
       case 'Cancelled':
