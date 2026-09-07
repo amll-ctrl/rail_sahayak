@@ -17,12 +17,15 @@ class RequestForm extends StatefulWidget {
 class _RequestFormState extends State<RequestForm> {
   final _formKey = GlobalKey<FormState>();
   final _pnrController = TextEditingController();
+  final _stationController = TextEditingController();
+  final _seatController = TextEditingController();
   final _notesController = TextEditingController();
 
   RailwayTrain? _selectedTrain;
   String? _selectedCoach;
   String _travelClass = 'Not specified';
   String _farePreference = 'concession';
+  DateTime? _journeyDate;
   bool _upgradeRequested = false;
   bool _isSubmitting = false;
 
@@ -37,8 +40,22 @@ class _RequestFormState extends State<RequestForm> {
   @override
   void dispose() {
     _pnrController.dispose();
+    _stationController.dispose();
+    _seatController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickJourneyDate() async {
+    final today = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _journeyDate ?? today,
+      firstDate: today,
+      lastDate: today.add(const Duration(days: 365)),
+      helpText: 'Select your journey date',
+    );
+    if (picked != null) setState(() => _journeyDate = picked);
   }
 
   Future<void> _submitForm() async {
@@ -48,18 +65,12 @@ class _RequestFormState extends State<RequestForm> {
         .toList();
 
     if (selectedAssistance.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select at least one type of assistance required.'),
-        backgroundColor: Colors.red,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select at least one type of assistance required.')));
       return;
     }
     if (!_formKey.currentState!.validate()) return;
-    if (_selectedTrain == null || _selectedCoach == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please select a train and coach.'),
-        backgroundColor: Colors.red,
-      ));
+    if (_selectedTrain == null || _selectedCoach == null || _journeyDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select your train, coach and journey date.')));
       return;
     }
 
@@ -85,21 +96,18 @@ class _RequestFormState extends State<RequestForm> {
         travelClass: _travelClass,
         farePreference: _farePreference,
         upgradeRequested: _upgradeRequested,
+        journeyDate: _journeyDate,
+        boardingStation: _stationController.text.trim(),
+        seat: _seatController.text.trim(),
       );
 
       await FirebaseFirestore.instance.collection('requests').add(request.toMap());
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: const Text('Assistance request sent to railway staff!'),
-        backgroundColor: Colors.green.shade700,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assistance request sent to railway staff!'), backgroundColor: Colors.green));
       Navigator.pop(context);
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Could not send the request. Please check your connection and try again.'),
-        backgroundColor: Colors.red,
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Could not send the request. Please check your connection and try again.'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -111,87 +119,87 @@ class _RequestFormState extends State<RequestForm> {
     const orange = Color(0xFFF57C00);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Request Assistance'),
-        backgroundColor: orange,
-        foregroundColor: Colors.white,
-      ),
+      appBar: AppBar(title: const Text('Request Assistance'), backgroundColor: orange, foregroundColor: Colors.white),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Form(
           key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text('Request Assistance Form', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text('Select your train and coach. Railway staff will use this information to assist you.', style: TextStyle(color: Colors.grey)),
-              const SizedBox(height: 20),
-              TextFormField(
-                controller: _pnrController,
-                keyboardType: TextInputType.number,
-                maxLength: 10,
-                decoration: InputDecoration(labelText: 'PNR Number (10 digits)', prefixIcon: const Icon(Icons.confirmation_number), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                validator: (value) {
-                  final pnr = value?.trim() ?? '';
-                  if (pnr.isEmpty) return 'Please enter your PNR number';
-                  if (pnr.length != 10 || int.tryParse(pnr) == null) return 'PNR must be exactly 10 numeric digits';
-                  return null;
-                },
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            const Text('Request Assistance Form', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            const Text('Tell us where and when you are travelling so staff can plan your assistance.', style: TextStyle(color: Colors.grey)),
+            const SizedBox(height: 20),
+            TextFormField(
+              controller: _pnrController,
+              keyboardType: TextInputType.number,
+              maxLength: 10,
+              decoration: InputDecoration(labelText: 'PNR Number (10 digits)', prefixIcon: const Icon(Icons.confirmation_number), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              validator: (value) {
+                final pnr = value?.trim() ?? '';
+                if (pnr.isEmpty) return 'Please enter your PNR number';
+                if (pnr.length != 10 || int.tryParse(pnr) == null) return 'PNR must be exactly 10 numeric digits';
+                return null;
+              },
+            ),
+            const SizedBox(height: 8),
+            TextFormField(
+              controller: _stationController,
+              decoration: InputDecoration(labelText: 'Boarding station', hintText: 'e.g. Thrissur', prefixIcon: const Icon(Icons.location_on_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              validator: (value) => value?.trim().isEmpty == true ? 'Please enter your boarding station' : null,
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: busy ? null : _pickJourneyDate,
+              borderRadius: BorderRadius.circular(12),
+              child: InputDecorator(
+                decoration: InputDecoration(labelText: 'Journey date', prefixIcon: const Icon(Icons.calendar_today), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+                child: Text(_journeyDate == null ? 'Select journey date' : '${_journeyDate!.day.toString().padLeft(2, '0')}/${_journeyDate!.month.toString().padLeft(2, '0')}/${_journeyDate!.year}'),
               ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<RailwayTrain>(
+              value: _selectedTrain,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: 'Train', prefixIcon: const Icon(Icons.train), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              hint: const Text('Select your train'),
+              items: railwayTrains.map((train) => DropdownMenuItem<RailwayTrain>(value: train, child: Text(train.label, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: busy ? null : (train) => setState(() { _selectedTrain = train; _selectedCoach = null; }),
+              validator: (value) => value == null ? 'Please select your train' : null,
+            ),
+            if (_selectedTrain != null) ...[
               const SizedBox(height: 8),
-              DropdownButtonFormField<RailwayTrain>(
-                value: _selectedTrain,
-                isExpanded: true,
-                decoration: InputDecoration(labelText: 'Train', prefixIcon: const Icon(Icons.train), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                hint: const Text('Select your train'),
-                items: railwayTrains.map((train) => DropdownMenuItem<RailwayTrain>(value: train, child: Text(train.label, overflow: TextOverflow.ellipsis))).toList(),
-                onChanged: busy ? null : (train) => setState(() { _selectedTrain = train; _selectedCoach = null; }),
-                validator: (value) => value == null ? 'Please select your train' : null,
-              ),
-              if (_selectedTrain != null) ...[
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  onPressed: busy ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => TrainStatusScreen(initialTrainNumber: _selectedTrain!.number))),
-                  icon: const Icon(Icons.my_location),
-                  label: const Text('View live location & timings'),
-                ),
-              ],
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedCoach,
-                isExpanded: true,
-                decoration: InputDecoration(labelText: 'Coach Number', prefixIcon: const Icon(Icons.door_sliding), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                hint: Text(_selectedTrain == null ? 'Select a train first' : 'Select your coach'),
-                items: _selectedTrain?.coaches.map((coach) => DropdownMenuItem<String>(value: coach, child: Text(coach))).toList(),
-                onChanged: busy || _selectedTrain == null ? null : (coach) => setState(() => _selectedCoach = coach),
-                validator: (value) => value == null ? 'Please select your coach' : null,
-              ),
-              const SizedBox(height: 24),
-              const Text('Travel class & fare preference', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<String>(
-                value: _travelClass,
-                isExpanded: true,
-                decoration: InputDecoration(labelText: 'Travel class', prefixIcon: const Icon(Icons.airline_seat_recline_normal), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-                items: const ['Not specified', '2S', 'SL', 'CC', '3E', '3A', '2A', '1A', 'EC', 'EA'].map((c) => DropdownMenuItem(value: c, child: Text(c == 'Not specified' ? c : 'Class $c'))).toList(),
-                onChanged: busy ? null : (value) => setState(() => _travelClass = value ?? 'Not specified'),
-              ),
-              const SizedBox(height: 12),
-              RadioListTile<String>(value: 'concession', groupValue: _farePreference, onChanged: busy ? null : (value) => setState(() { _farePreference = value!; _upgradeRequested = false; }), title: const Text('Use eligible Divyangjan concession'), subtitle: const Text('Concession eligibility is governed by Indian Railways rules.'), contentPadding: EdgeInsets.zero),
-              RadioListTile<String>(value: 'full_fare', groupValue: _farePreference, onChanged: busy ? null : (value) => setState(() { _farePreference = value!; _upgradeRequested = true; }), title: const Text('Pay full fare / request higher class'), subtitle: const Text('Keep the same RailSahayak assistance while travelling in your preferred class.'), contentPadding: EdgeInsets.zero),
-              if (_upgradeRequested) Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.orange.withValues(alpha: .08), borderRadius: BorderRadius.circular(12)), child: const Text('This records your full-fare/higher-class preference for the assistance team. RailSahayak does not itself issue or modify railway tickets; ticketing remains subject to Indian Railways/IRCTC rules and availability.')),
-              const SizedBox(height: 20),
-              const Text('Select Assistance Required:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              ..._assistanceOptions.map((opt) => CheckboxListTile(title: Text(opt['title']), value: opt['checked'], secondary: Icon(opt['icon'], color: orange), onChanged: busy ? null : (val) => setState(() => opt['checked'] = val ?? false), activeColor: orange, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading)),
-              const SizedBox(height: 12),
-              TextFormField(controller: _notesController, maxLines: 3, enabled: !busy, decoration: InputDecoration(labelText: 'Additional Notes / Specific Needs', hintText: 'e.g. Need wheelchair boarding ramp on platform 4.', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 24),
-              ElevatedButton(onPressed: busy ? null : _submitForm, style: ElevatedButton.styleFrom(backgroundColor: orange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: busy ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))) : const Text('Submit Assistance Request', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-              const SizedBox(height: 24),
+              OutlinedButton.icon(onPressed: busy ? null : () => Navigator.push(context, MaterialPageRoute(builder: (_) => TrainStatusScreen(initialTrainNumber: _selectedTrain!.number))), icon: const Icon(Icons.my_location), label: const Text('View live location & timings')),
             ],
-          ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedCoach,
+              isExpanded: true,
+              decoration: InputDecoration(labelText: 'Coach Number', prefixIcon: const Icon(Icons.door_sliding), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
+              hint: Text(_selectedTrain == null ? 'Select a train first' : 'Select your coach'),
+              items: _selectedTrain?.coaches.map((coach) => DropdownMenuItem<String>(value: coach, child: Text(coach))).toList(),
+              onChanged: busy || _selectedTrain == null ? null : (coach) => setState(() => _selectedCoach = coach),
+              validator: (value) => value == null ? 'Please select your coach' : null,
+            ),
+            const SizedBox(height: 12),
+            TextFormField(controller: _seatController, keyboardType: TextInputType.text, decoration: InputDecoration(labelText: 'Seat / Berth Number', hintText: 'e.g. 41', prefixIcon: const Icon(Icons.event_seat), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))), validator: (value) => value?.trim().isEmpty == true ? 'Please enter your seat or berth number' : null),
+            const SizedBox(height: 24),
+            const Text('Travel class & fare preference', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            DropdownButtonFormField<String>(value: _travelClass, isExpanded: true, decoration: InputDecoration(labelText: 'Travel class', prefixIcon: const Icon(Icons.airline_seat_recline_normal), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))), items: const ['Not specified', '2S', 'SL', 'CC', '3E', '3A', '2A', '1A', 'EC', 'EA'].map((c) => DropdownMenuItem(value: c, child: Text(c == 'Not specified' ? c : 'Class $c'))).toList(), onChanged: busy ? null : (value) => setState(() => _travelClass = value ?? 'Not specified')),
+            const SizedBox(height: 12),
+            RadioListTile<String>(value: 'concession', groupValue: _farePreference, onChanged: busy ? null : (value) => setState(() { _farePreference = value!; _upgradeRequested = false; }), title: const Text('Use eligible Divyangjan concession'), subtitle: const Text('Concession eligibility is governed by Indian Railways rules.'), contentPadding: EdgeInsets.zero),
+            RadioListTile<String>(value: 'full_fare', groupValue: _farePreference, onChanged: busy ? null : (value) => setState(() { _farePreference = value!; _upgradeRequested = true; }), title: const Text('Pay full fare / request higher class'), subtitle: const Text('Keep the same RailSahayak assistance while travelling in your preferred class.'), contentPadding: EdgeInsets.zero),
+            if (_upgradeRequested) Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.orange.withValues(alpha: .08), borderRadius: BorderRadius.circular(12)), child: const Text('This records your full-fare/higher-class preference for the assistance team. RailSahayak does not issue or modify railway tickets.')),
+            const SizedBox(height: 20),
+            const Text('Select Assistance Required:', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            ..._assistanceOptions.map((opt) => CheckboxListTile(title: Text(opt['title']), value: opt['checked'], secondary: Icon(opt['icon'], color: orange), onChanged: busy ? null : (val) => setState(() => opt['checked'] = val ?? false), activeColor: orange, contentPadding: EdgeInsets.zero, controlAffinity: ListTileControlAffinity.leading)),
+            const SizedBox(height: 12),
+            TextFormField(controller: _notesController, maxLines: 3, enabled: !busy, decoration: InputDecoration(labelText: 'Additional Notes / Specific Needs', hintText: 'e.g. Need wheelchair boarding ramp.', border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
+            const SizedBox(height: 24),
+            ElevatedButton(onPressed: busy ? null : _submitForm, style: ElevatedButton.styleFrom(backgroundColor: orange, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: busy ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2.5, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))) : const Text('Submit Assistance Request', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            const SizedBox(height: 24),
+          ]),
         ),
       ),
     );
