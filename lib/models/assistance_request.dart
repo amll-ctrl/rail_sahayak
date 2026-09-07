@@ -3,23 +3,33 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class AssistanceRequest {
   final String id;
   final String pnr;
-  // Kept as the display label for backward compatibility with existing requests.
   final String trainNo;
-  // New canonical train number used for live data lookups.
   final String trainNumber;
   final String coach;
   final String passengerId;
   final String passengerName;
   final String passengerPhone;
-  final String status; // Requested, Assigned, Assisting, Completed, Cancelled
+  final String status;
   final List<String> assistanceType;
   final DateTime timestamp;
   final String? staffId;
   final String? staffName;
   final String? notes;
   final String travelClass;
-  final String farePreference; // concession or full_fare
+  final String farePreference;
   final bool upgradeRequested;
+  final DateTime? journeyDate;
+  final String boardingStation;
+  final String? seat;
+  final String? platform;
+  final String? currentLocation;
+  final DateTime? atStationAt;
+  final DateTime? acknowledgedAt;
+  final DateTime? locatedAt;
+  final DateTime? boardingAt;
+  final DateTime? boardedAt;
+  final DateTime? completedAt;
+  final DateTime? escalatedAt;
 
   AssistanceRequest({
     required this.id,
@@ -39,7 +49,25 @@ class AssistanceRequest {
     this.travelClass = 'Not specified',
     this.farePreference = 'concession',
     this.upgradeRequested = false,
+    this.journeyDate,
+    this.boardingStation = '',
+    this.seat,
+    this.platform,
+    this.currentLocation,
+    this.atStationAt,
+    this.acknowledgedAt,
+    this.locatedAt,
+    this.boardingAt,
+    this.boardedAt,
+    this.completedAt,
+    this.escalatedAt,
   });
+
+  static DateTime? _date(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is String) return DateTime.tryParse(value);
+    return null;
+  }
 
   factory AssistanceRequest.fromMap(Map<String, dynamic> map, String docId) {
     DateTime parsedTime;
@@ -76,6 +104,18 @@ class AssistanceRequest {
       travelClass: (map['travelClass'] ?? 'Not specified').toString(),
       farePreference: (map['farePreference'] ?? 'concession').toString(),
       upgradeRequested: map['upgradeRequested'] == true,
+      journeyDate: _date(map['journeyDate']),
+      boardingStation: (map['boardingStation'] ?? '').toString(),
+      seat: map['seat']?.toString(),
+      platform: map['platform']?.toString(),
+      currentLocation: map['currentLocation']?.toString(),
+      atStationAt: _date(map['atStationAt']),
+      acknowledgedAt: _date(map['acknowledgedAt']),
+      locatedAt: _date(map['locatedAt']),
+      boardingAt: _date(map['boardingAt']),
+      boardedAt: _date(map['boardedAt']),
+      completedAt: _date(map['completedAt']),
+      escalatedAt: _date(map['escalatedAt']),
     );
   }
 
@@ -97,32 +137,32 @@ class AssistanceRequest {
       'travelClass': travelClass,
       'farePreference': farePreference,
       'upgradeRequested': upgradeRequested,
+      'journeyDate': journeyDate == null ? null : Timestamp.fromDate(journeyDate!),
+      'boardingStation': boardingStation,
+      'seat': seat,
+      'platform': platform,
+      'currentLocation': currentLocation,
+      'atStationAt': atStationAt == null ? null : Timestamp.fromDate(atStationAt!),
+      'acknowledgedAt': acknowledgedAt == null ? null : Timestamp.fromDate(acknowledgedAt!),
+      'locatedAt': locatedAt == null ? null : Timestamp.fromDate(locatedAt!),
+      'boardingAt': boardingAt == null ? null : Timestamp.fromDate(boardingAt!),
+      'boardedAt': boardedAt == null ? null : Timestamp.fromDate(boardedAt!),
+      'completedAt': completedAt == null ? null : Timestamp.fromDate(completedAt!),
+      'escalatedAt': escalatedAt == null ? null : Timestamp.fromDate(escalatedAt!),
     };
   }
 
-  AssistanceRequest copyWith({
-    String? status,
-    String? staffId,
-    String? staffName,
-  }) {
+  AssistanceRequest copyWith({String? status, String? staffId, String? staffName}) {
     return AssistanceRequest(
-      id: id,
-      pnr: pnr,
-      trainNo: trainNo,
-      trainNumber: trainNumber,
-      coach: coach,
-      passengerId: passengerId,
-      passengerName: passengerName,
-      passengerPhone: passengerPhone,
-      status: status ?? this.status,
-      assistanceType: assistanceType,
-      timestamp: timestamp,
-      staffId: staffId ?? this.staffId,
-      staffName: staffName ?? this.staffName,
-      notes: notes,
-      travelClass: travelClass,
-      farePreference: farePreference,
-      upgradeRequested: upgradeRequested,
+      id: id, pnr: pnr, trainNo: trainNo, trainNumber: trainNumber, coach: coach,
+      passengerId: passengerId, passengerName: passengerName, passengerPhone: passengerPhone,
+      status: status ?? this.status, assistanceType: assistanceType, timestamp: timestamp,
+      staffId: staffId ?? this.staffId, staffName: staffName ?? this.staffName, notes: notes,
+      travelClass: travelClass, farePreference: farePreference, upgradeRequested: upgradeRequested,
+      journeyDate: journeyDate, boardingStation: boardingStation, seat: seat, platform: platform,
+      currentLocation: currentLocation, atStationAt: atStationAt, acknowledgedAt: acknowledgedAt,
+      locatedAt: locatedAt, boardingAt: boardingAt, boardedAt: boardedAt,
+      completedAt: completedAt, escalatedAt: escalatedAt,
     );
   }
 }
