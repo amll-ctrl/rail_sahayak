@@ -8,6 +8,10 @@ class AssistanceWorkflowService {
   }
 
   Future<void> updateStatus(String requestId, String status) async {
+    if (status == 'Cancelled') {
+      await cancel(requestId);
+      return;
+    }
     await _functions.httpsCallable('updateAssistanceStatus').call({'requestId': requestId, 'status': status});
   }
 
