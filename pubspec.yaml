@@ -13,8 +13,8 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   provider: ^6.1.2
-  firebase_core: ^4.13.0
-  firebase_auth: ^6.5.7
+  firebase_core: ^4.14.0
+  firebase_auth: ^6.6.1
   cloud_firestore: ^6.8.0
   cloud_functions: ^6.4.0
   google_sign_in: ^7.2.0
