@@ -80,11 +80,15 @@ class _StaffDashboardState extends State<StaffDashboard> {
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
                   children: [
                     _filterButton('All', Icons.check),
+                    _filterButton('Requested', Icons.hourglass_empty),
                     _filterButton('At Station', Icons.location_on),
                     _filterButton('Assigned', Icons.assignment_ind_outlined),
                     _filterButton('Located', Icons.person_pin_circle),
                     _filterButton('Boarding', Icons.directions_walk),
                     _filterButton('Boarded', Icons.check_circle_outline),
+                    _filterButton('Completed', Icons.done_all),
+                    _filterButton('Escalated', Icons.warning_amber),
+                    _filterButton('Cancelled', Icons.cancel_outlined),
                   ],
                 ),
               ),
@@ -248,10 +252,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
                             ],
                             if (req.passengerPhone.isNotEmpty) ...[
                               const SizedBox(height: 8),
-                              Text(
-                                'Passenger: ${req.passengerPhone}',
-                                style: const TextStyle(fontWeight: FontWeight.w600),
-                              ),
+                              Text('Passenger: ${req.passengerPhone}', style: const TextStyle(fontWeight: FontWeight.w600)),
                             ],
                             const SizedBox(height: 12),
                             if (!terminal) _actionButton(context, req),
