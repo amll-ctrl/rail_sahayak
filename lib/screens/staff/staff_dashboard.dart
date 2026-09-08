@@ -25,6 +25,8 @@ class _StaffDashboardState extends State<StaffDashboard> {
   String _filter = 'All';
   String _sort = 'Priority';
 
+  static const _activeStatuses = {'Assigned', 'Located', 'Boarding', 'Boarded'};
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -38,44 +40,70 @@ class _StaffDashboardState extends State<StaffDashboard> {
     final user = provider.currentUser;
     final staffName = user?.name.trim().isNotEmpty == true ? user!.name.trim() : 'Railway Staff';
 
-    return Scaffold(
-      backgroundColor: _background,
-      appBar: AppBar(
-        title: Text(_title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: _blue,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          IconButton(
-            tooltip: 'Refresh',
-            onPressed: () => setState(() {}),
-            icon: const Icon(Icons.refresh),
-          ),
-          IconButton(
-            tooltip: 'Sign out',
-            onPressed: provider.isLoading ? null : provider.logout,
-            icon: const Icon(Icons.logout),
-          ),
-        ],
-      ),
-      body: IndexedStack(
-        index: _tabIndex,
-        children: [
-          _home(staffName, requests),
-          _requests(requests),
-          _duty(requests),
-          _profile(user, staffName),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex,
-        onDestinationSelected: (value) => setState(() => _tabIndex = value),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
-          NavigationDestination(icon: Icon(Icons.support_agent_outlined), selectedIcon: Icon(Icons.support_agent), label: 'Requests'),
-          NavigationDestination(icon: Icon(Icons.location_on_outlined), selectedIcon: Icon(Icons.location_on), label: 'Duty'),
-          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
-        ],
+    return PopScope(
+      canPop: _tabIndex == 0 && _expanded.isEmpty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop || !mounted) return;
+        setState(() {
+          if (_expanded.isNotEmpty) {
+            _expanded.clear();
+          } else {
+            _tabIndex = 0;
+          }
+        });
+      },
+      child: Scaffold(
+        backgroundColor: _background,
+        appBar: AppBar(
+          leading: _tabIndex == 0
+              ? null
+              : IconButton(
+                  tooltip: 'Back to home',
+                  onPressed: () => setState(() => _tabIndex = 0),
+                  icon: const Icon(Icons.arrow_back),
+                ),
+          title: Text(_title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          backgroundColor: _blue,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: () => setState(() {}),
+              icon: const Icon(Icons.refresh),
+            ),
+            IconButton(
+              tooltip: 'Sign out',
+              onPressed: provider.isLoading ? null : provider.logout,
+              icon: const Icon(Icons.logout),
+            ),
+          ],
+        ),
+        body: IndexedStack(
+          index: _tabIndex,
+          children: [
+            _home(staffName, requests),
+            _requests(requests),
+            _duty(requests),
+            _profile(user, staffName),
+          ],
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _tabIndex,
+          onDestinationSelected: (value) {
+            if (value == _tabIndex) return;
+            setState(() {
+              _expanded.clear();
+              _tabIndex = value;
+            });
+          },
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Home'),
+            NavigationDestination(icon: Icon(Icons.support_agent_outlined), selectedIcon: Icon(Icons.support_agent), label: 'Requests'),
+            NavigationDestination(icon: Icon(Icons.location_on_outlined), selectedIcon: Icon(Icons.location_on), label: 'Duty'),
+            NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profile'),
+          ],
+        ),
       ),
     );
   }
@@ -98,7 +126,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
       onRefresh: () async => setState(() {}),
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(0, 0, 0, 24),
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
           Container(
             color: _blue,
@@ -106,17 +134,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Active Station Duty: $staffName',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700),
-                ),
+                Text('Active Station Duty: $staffName', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
                 const SizedBox(height: 7),
-                const Text(
-                  'Handle assistance requests quickly and keep passengers moving.',
-                  style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.35),
-                ),
+                const Text('Handle assistance requests quickly and keep passengers moving.', style: TextStyle(color: Colors.white70, fontSize: 15, height: 1.35)),
               ],
             ),
           ),
@@ -125,7 +145,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const _SectionLabel('TODAY\'S WORK'),
+                const _SectionLabel("TODAY'S WORK"),
                 const SizedBox(height: 10),
                 GridView.count(
                   crossAxisCount: 2,
@@ -159,25 +179,21 @@ class _StaffDashboardState extends State<StaffDashboard> {
   }
 
   Widget _attentionBanner(int count) {
+    final active = count > 0;
     return Material(
-      color: count > 0 ? const Color(0xFFFFF0DF) : const Color(0xFFEAF5EC),
+      color: active ? const Color(0xFFFFF0DF) : const Color(0xFFEAF5EC),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: count > 0 ? () => _openRequests('Attention') : null,
+        onTap: active ? () => _openRequests('Attention') : null,
         child: Padding(
           padding: const EdgeInsets.all(15),
           child: Row(
             children: [
-              Icon(count > 0 ? Icons.priority_high : Icons.check_circle_outline, color: count > 0 ? Colors.deepOrange : Colors.green.shade800),
+              Icon(active ? Icons.priority_high : Icons.check_circle_outline, color: active ? Colors.deepOrange : Colors.green.shade800),
               const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  count > 0 ? '$count request${count == 1 ? '' : 's'} need attention' : 'No requests need attention',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-              ),
-              if (count > 0) const Icon(Icons.chevron_right),
+              Expanded(child: Text(active ? '$count request${count == 1 ? '' : 's'} need attention' : 'No requests need attention', style: const TextStyle(fontWeight: FontWeight.w700))),
+              if (active) const Icon(Icons.chevron_right),
             ],
           ),
         ),
@@ -238,33 +254,19 @@ class _StaffDashboardState extends State<StaffDashboard> {
             decoration: InputDecoration(
               hintText: 'Search passenger, train, PNR or station',
               prefixIcon: const Icon(Icons.search),
-              suffixIcon: _searchController.text.isEmpty
-                  ? null
-                  : IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); setState(() {}); }),
+              suffixIcon: _searchController.text.isEmpty ? null : IconButton(icon: const Icon(Icons.clear), onPressed: () { _searchController.clear(); setState(() {}); }),
               filled: true,
               fillColor: Colors.white,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
             ),
           ),
           const SizedBox(height: 10),
-          Row(
-            children: [
-              Expanded(child: _compactControl(Icons.filter_list, _filter, _showFilterSheet)),
-              const SizedBox(width: 8),
-              Expanded(child: _compactControl(Icons.sort, _sort, _showSortSheet)),
-            ],
-          ),
+          Row(children: [Expanded(child: _compactControl(Icons.filter_list, _filter, _showFilterSheet)), const SizedBox(width: 8), Expanded(child: _compactControl(Icons.sort, _sort, _showSortSheet))]),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Text('${filtered.length} request${filtered.length == 1 ? '' : 's'}', style: const TextStyle(fontWeight: FontWeight.w700)),
-              const Spacer(),
-              if (_filter != 'All') TextButton(onPressed: () => setState(() => _filter = 'All'), child: const Text('Clear filter')),
-            ],
-          ),
+          Row(children: [Text('${filtered.length} request${filtered.length == 1 ? '' : 's'}', style: const TextStyle(fontWeight: FontWeight.w700)), const Spacer(), if (_filter != 'All') TextButton(onPressed: () => setState(() => _filter = 'All'), child: const Text('Clear filter'))]),
           const SizedBox(height: 2),
           if (filtered.isEmpty) _emptyState(),
-          ...filtered.map((req) => _requestCard(req)),
+          ...filtered.map(_requestCard),
         ],
       ),
     );
@@ -275,13 +277,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
       onPressed: onTap,
       icon: Icon(icon, size: 18),
       label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-      style: OutlinedButton.styleFrom(
-        alignment: Alignment.centerLeft,
-        foregroundColor: Colors.black87,
-        side: const BorderSide(color: Color(0xFFD8CEC7)),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      ),
+      style: OutlinedButton.styleFrom(alignment: Alignment.centerLeft, foregroundColor: Colors.black87, side: const BorderSide(color: Color(0xFFD8CEC7)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12)),
     );
   }
 
@@ -290,22 +286,13 @@ class _StaffDashboardState extends State<StaffDashboard> {
       margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.all(28),
       decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(18)),
-      child: const Column(
-        children: [
-          Icon(Icons.inbox_outlined, size: 42, color: _muted),
-          SizedBox(height: 10),
-          Text('No matching requests', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
-          SizedBox(height: 4),
-          Text('Try another filter or search term.', textAlign: TextAlign.center, style: TextStyle(color: _muted)),
-        ],
-      ),
+      child: const Column(children: [Icon(Icons.inbox_outlined, size: 42, color: _muted), SizedBox(height: 10), Text('No matching requests', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)), SizedBox(height: 4), Text('Try another filter or search term.', textAlign: TextAlign.center, style: TextStyle(color: _muted))]),
     );
   }
 
   List<AssistanceRequest> _visibleRequests(List<AssistanceRequest> source) {
     final query = _searchController.text.trim().toLowerCase();
     Iterable<AssistanceRequest> result = source;
-
     if (_filter == 'Attention') {
       result = result.where((r) => r.status == 'Requested' || r.status == 'At Station');
     } else if (_filter == 'In Progress') {
@@ -313,14 +300,12 @@ class _StaffDashboardState extends State<StaffDashboard> {
     } else if (_filter != 'All') {
       result = result.where((r) => r.status == _filter);
     }
-
     if (query.isNotEmpty) {
       result = result.where((r) {
         final haystack = [r.passengerName, r.trainNo, r.pnr, r.coach, r.seat?.toString() ?? '', r.boardingStation, r.currentLocation ?? ''].join(' ').toLowerCase();
         return haystack.contains(query);
       });
     }
-
     final list = result.toList();
     if (_sort == 'Priority') {
       list.sort((a, b) => _priority(a.status).compareTo(_priority(b.status)));
@@ -352,11 +337,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(color: status.color, width: req.status == 'At Station' ? 1.8 : 1),
-      ),
+      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(17), border: Border.all(color: status.color, width: req.status == 'At Station' ? 1.8 : 1)),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -364,51 +345,23 @@ class _StaffDashboardState extends State<StaffDashboard> {
           onTap: () => setState(() => expanded ? _expanded.remove(req.id) : _expanded.add(req.id)),
           child: Padding(
             padding: const EdgeInsets.fromLTRB(15, 14, 15, 13),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                        decoration: BoxDecoration(color: status.color, borderRadius: BorderRadius.circular(9)),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(status.icon, color: Colors.white, size: 15),
-                            const SizedBox(width: 5),
-                            Flexible(child: Text(req.status.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(child: Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
-                    Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 21, color: _muted),
-                  ],
-                ),
-                const SizedBox(height: 7),
-                Text(req.trainNo.isEmpty ? 'Train not specified' : req.trainNo, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 6),
-                Text('${req.coach} • ${req.seat ?? 'Seat not specified'}', style: const TextStyle(fontWeight: FontWeight.w700)),
-                if (req.boardingStation.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text('Boarding: ${req.boardingStation}', maxLines: 1, overflow: TextOverflow.ellipsis),
-                ],
-                if (req.platform?.isNotEmpty == true || req.currentLocation?.isNotEmpty == true) ...[
-                  const SizedBox(height: 4),
-                  Text([
-                    if (req.platform?.isNotEmpty == true) 'Platform ${req.platform}',
-                    if (req.currentLocation?.isNotEmpty == true) req.currentLocation!,
-                  ].join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-                ],
-                AnimatedSize(
-                  duration: const Duration(milliseconds: 180),
-                  child: expanded ? _requestDetails(req, terminal) : const SizedBox.shrink(),
-                ),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Flexible(child: Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6), decoration: BoxDecoration(color: status.color, borderRadius: BorderRadius.circular(9)), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(status.icon, color: Colors.white, size: 15), const SizedBox(width: 5), Flexible(child: Text(req.status.toUpperCase(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)))]))),
+                const SizedBox(width: 9),
+                Expanded(child: Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700))),
+                Icon(expanded ? Icons.expand_less : Icons.expand_more, size: 21, color: _muted),
+              ]),
+              const SizedBox(height: 7),
+              Text(req.trainNo.isEmpty ? 'Train not specified' : req.trainNo, style: const TextStyle(color: _muted, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 6),
+              Text('${req.coach} • ${req.seat ?? 'Seat not specified'} • PNR ${req.pnr}', style: const TextStyle(fontWeight: FontWeight.w600)),
+              if (req.boardingStation.isNotEmpty) ...[const SizedBox(height: 5), Text('Boarding: ${req.boardingStation}')],
+              if (req.platform?.isNotEmpty == true || req.currentLocation?.isNotEmpty == true) ...[const SizedBox(height: 5), Text([if (req.platform?.isNotEmpty == true) 'Platform ${req.platform}', if (req.currentLocation?.isNotEmpty == true) req.currentLocation!].join(' • '), style: const TextStyle(fontWeight: FontWeight.w700))],
+              AnimatedSize(duration: const Duration(milliseconds: 180), child: expanded ? _requestDetails(req, terminal) : const SizedBox.shrink()),
+              const SizedBox(height: 4),
+              Text(expanded ? 'Tap to collapse' : 'Tap for details', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+            ]),
           ),
         ),
       ),
@@ -416,101 +369,76 @@ class _StaffDashboardState extends State<StaffDashboard> {
   }
 
   Widget _requestDetails(AssistanceRequest req, bool terminal) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Divider(height: 20),
-        Text('PNR  ${req.pnr}', style: const TextStyle(fontWeight: FontWeight.w700)),
-        const SizedBox(height: 7),
-        Wrap(
-          spacing: 6,
-          runSpacing: 5,
-          children: req.assistanceType.map((x) => Chip(label: Text(x), visualDensity: VisualDensity.compact)).toList(),
-        ),
-        if (req.notes?.isNotEmpty == true) ...[
-          const SizedBox(height: 5),
-          Text('Notes: ${req.notes}', style: const TextStyle(fontStyle: FontStyle.italic)),
-        ],
-        if (req.passengerPhone.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text('Passenger: ${req.passengerPhone}', style: const TextStyle(fontWeight: FontWeight.w600)),
-        ],
-        if (req.status == 'Escalated') ...[
-          const SizedBox(height: 10),
-          const Text('Escalated to supervisor.', style: TextStyle(color: Colors.deepOrange, fontWeight: FontWeight.w700)),
-        ] else if (!terminal) ...[
-          const SizedBox(height: 10),
-          _actionButton(req),
-          if (req.status == 'At Station' || req.status == 'Assigned') ...[
-            const SizedBox(height: 7),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: () => _escalate(req),
-                icon: const Icon(Icons.warning_amber_outlined, size: 18),
-                label: const Text('Escalate'),
-                style: OutlinedButton.styleFrom(foregroundColor: Colors.deepOrange),
-              ),
-            ),
-          ],
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      const Divider(height: 22),
+      Wrap(spacing: 7, runSpacing: 6, children: req.assistanceType.map((x) => Chip(label: Text(x), visualDensity: VisualDensity.compact)).toList()),
+      if (req.notes?.isNotEmpty == true) ...[const SizedBox(height: 8), Text('Notes: ${req.notes}', style: const TextStyle(fontStyle: FontStyle.italic))],
+      if (req.passengerPhone.isNotEmpty) ...[const SizedBox(height: 8), Text('Passenger: ${req.passengerPhone}', style: const TextStyle(fontWeight: FontWeight.w600))],
+      if (req.status == 'Escalated') ...[const SizedBox(height: 12), const Text('Escalated to supervisor. Awaiting further action.', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.deepOrange))],
+      if (!terminal && req.status != 'Escalated') ...[
+        const SizedBox(height: 12),
+        _actionButton(req),
+        if (req.status == 'At Station' || req.status == 'Assigned') ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(onPressed: () => _escalate(req), icon: const Icon(Icons.warning_amber), label: const Text('Escalate to supervisor'), style: OutlinedButton.styleFrom(foregroundColor: Colors.deepOrange, minimumSize: const Size(double.infinity, 44))),
         ],
       ],
-    );
+    ]);
   }
 
   Widget _actionButton(AssistanceRequest req) {
-    final data = _nextAction(req.status);
+    final action = switch (req.status) {
+      'At Station' => ('Acknowledge Request', Icons.notifications_active),
+      'Assigned' => ('Passenger Located', Icons.person_pin_circle),
+      'Located' => ('Start Boarding', Icons.directions_walk),
+      'Boarding' => ('Confirm Passenger Boarded', Icons.check_circle),
+      'Boarded' => ('Complete Assistance', Icons.done_all),
+      _ => ('Accept & Assign', Icons.assignment_ind_outlined),
+    };
+
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () => _advance(req),
-        icon: Icon(data.icon),
-        label: Text(data.label),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: _blue,
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 13),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
+        onPressed: () async {
+          final next = switch (req.status) {
+            'Requested' => 'Assigned',
+            'At Station' => 'Assigned',
+            'Assigned' => 'Located',
+            'Located' => 'Boarding',
+            'Boarding' => 'Boarded',
+            'Boarded' => 'Completed',
+            _ => null,
+          };
+          if (next == null) return;
+          try {
+            await AssistanceWorkflowService().updateStatus(req.id, next);
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_successMessage(next)), backgroundColor: Colors.green));
+          } catch (e) {
+            if (!mounted) return;
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update request: $e'), backgroundColor: Colors.red));
+          }
+        },
+        icon: Icon(action.$2),
+        label: Text(action.$1),
+        style: ElevatedButton.styleFrom(backgroundColor: _blue, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 46), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
       ),
     );
-  }
-
-  ({String label, IconData icon, String? next}) _nextAction(String status) => switch (status) {
-        'At Station' => (label: 'Acknowledge & Assign', icon: Icons.assignment_ind_outlined, next: 'Assigned'),
-        'Assigned' => (label: 'Mark Passenger Located', icon: Icons.person_pin_circle_outlined, next: 'Located'),
-        'Located' => (label: 'Start Boarding', icon: Icons.directions_walk_outlined, next: 'Boarding'),
-        'Boarding' => (label: 'Confirm Passenger Boarded', icon: Icons.check_circle_outline, next: 'Boarded'),
-        'Boarded' => (label: 'Complete Assistance', icon: Icons.done_all, next: 'Completed'),
-        _ => (label: 'Accept & Assign', icon: Icons.assignment_ind_outlined, next: 'Assigned'),
-      };
-
-  Future<void> _advance(AssistanceRequest req) async {
-    final next = _nextAction(req.status).next;
-    if (next == null) return;
-    try {
-      await AssistanceWorkflowService().updateStatus(req.id, next);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_success(next))));
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update request: $e')));
-    }
   }
 
   Future<void> _escalate(AssistanceRequest req) async {
     try {
       await AssistanceWorkflowService().escalate(req.id);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supervisor escalation sent.')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Supervisor escalation sent.'), backgroundColor: Colors.deepOrange));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not escalate: $e')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not escalate: $e'), backgroundColor: Colors.red));
     }
   }
 
-  String _success(String status) => switch (status) {
-        'Assigned' => 'Request assigned to you.',
+  String _successMessage(String status) => switch (status) {
+        'Assigned' => 'Request acknowledged and assigned to you.',
         'Located' => 'Passenger marked as located.',
         'Boarding' => 'Boarding assistance started.',
         'Boarded' => 'Passenger marked as boarded.',
@@ -519,138 +447,163 @@ class _StaffDashboardState extends State<StaffDashboard> {
       };
 
   Widget _duty(List<AssistanceRequest> requests) {
-    final active = requests.where((r) => _activeStatuses.contains(r.status) || r.status == 'At Station' || r.status == 'Requested').toList();
+    final active = requests.where((r) => !_terminalStatuses.contains(r.status)).toList();
     final groups = <String, List<AssistanceRequest>>{};
-    for (final req in active) {
-      final station = req.boardingStation.trim().isEmpty ? 'Station not specified' : req.boardingStation.trim();
-      groups.putIfAbsent(station, () => []).add(req);
+    for (final request in active) {
+      final station = request.boardingStation.trim().isEmpty ? 'Station not specified' : request.boardingStation.trim();
+      groups.putIfAbsent(station, () => <AssistanceRequest>[]).add(request);
+    }
+    final stations = groups.keys.toList()..sort();
+
+    if (stations.isEmpty) {
+      return ListView(padding: const EdgeInsets.all(20), children: [_emptyDutyState()]);
     }
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
+      padding: const EdgeInsets.fromLTRB(18, 16, 18, 24),
       children: [
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: _blue, borderRadius: BorderRadius.circular(18)),
-          child: Row(
-            children: [
-              const Icon(Icons.location_on, color: Colors.white, size: 28),
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                const Text('Current workload', style: TextStyle(color: Colors.white70)),
-                Text('${active.length} active passenger${active.length == 1 ? '' : 's'}', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700)),
-              ])),
-            ],
-          ),
+          decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(17)),
+          child: Row(children: [const Icon(Icons.location_on_outlined, color: _blue), const SizedBox(width: 12), Expanded(child: Text('${active.length} active passenger${active.length == 1 ? '' : 's'} across ${stations.length} station${stations.length == 1 ? '' : 's'}', style: const TextStyle(fontWeight: FontWeight.w700)))]),
         ),
-        const SizedBox(height: 20),
-        const _SectionLabel('BOARDING STATIONS'),
-        const SizedBox(height: 10),
-        if (groups.isEmpty) _emptyState(),
-        ...groups.entries.map((entry) => _stationTile(entry.key, entry.value)),
+        const SizedBox(height: 14),
+        ...stations.map((station) => _stationGroup(station, groups[station]!)),
       ],
     );
   }
 
-  Widget _stationTile(String station, List<AssistanceRequest> requests) {
+  Widget _stationGroup(String station, List<AssistanceRequest> requests) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        onTap: () {
-          _searchController.text = station;
-          setState(() { _filter = 'All'; _tabIndex = 1; });
-        },
-        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 4),
-        leading: const Icon(Icons.place_outlined, color: _blue),
-        title: Text(station, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
-        subtitle: Text('${requests.length} active request${requests.length == 1 ? '' : 's'}'),
-        trailing: const Icon(Icons.chevron_right),
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17), border: Border.all(color: const Color(0xFFE1D8D1))),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 15),
+        childrenPadding: const EdgeInsets.fromLTRB(15, 0, 15, 12),
+        leading: const Icon(Icons.location_on_outlined, color: _blue),
+        title: Text(station, style: const TextStyle(fontWeight: FontWeight.w700)),
+        subtitle: Text('${requests.length} passenger${requests.length == 1 ? '' : 's'}'),
+        children: requests.map((r) => ListTile(
+          contentPadding: EdgeInsets.zero,
+          title: Text(r.passengerName.isEmpty ? 'Passenger' : r.passengerName, style: const TextStyle(fontWeight: FontWeight.w600)),
+          subtitle: Text('${r.trainNo} • ${r.coach} • ${r.seat ?? 'Seat not specified'}'),
+          trailing: Icon(_statusStyle(r.status).icon, color: _statusStyle(r.status).color),
+          onTap: () {
+            setState(() {
+              _tabIndex = 1;
+              _filter = r.status;
+              _expanded.clear();
+              _expanded.add(r.id);
+            });
+          },
+        )).toList(),
       ),
     );
   }
 
+  Widget _emptyDutyState() {
+    return Container(
+      padding: const EdgeInsets.all(28),
+      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(18)),
+      child: const Column(children: [Icon(Icons.location_off_outlined, size: 42, color: _muted), SizedBox(height: 10), Text('No active station duty', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)), SizedBox(height: 4), Text('Active assistance requests will appear here.', textAlign: TextAlign.center, style: TextStyle(color: _muted))]),
+    );
+  }
+
   Widget _profile(dynamic user, String staffName) {
+    final username = user?.username?.toString() ?? '';
+    final email = user?.email?.toString() ?? '';
+    final phone = user?.phone?.toString() ?? '';
     return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 22, 20, 28),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 24),
       children: [
-        CircleAvatar(radius: 36, backgroundColor: _surface, child: Icon(Icons.person, size: 38, color: _blue)),
+        Center(child: CircleAvatar(radius: 34, backgroundColor: _blue, child: Text(staffName.isEmpty ? 'S' : staffName[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w700)))),
         const SizedBox(height: 12),
-        Center(child: Text(staffName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700))),
-        const SizedBox(height: 24),
-        _profileRow(Icons.badge_outlined, 'Username', user?.username),
-        _profileRow(Icons.email_outlined, 'Email', user?.email),
-        _profileRow(Icons.phone_outlined, 'Phone', user?.phone),
-        _profileRow(Icons.security_outlined, 'Role', user?.role.toString().split('.').last),
-        const SizedBox(height: 18),
-        const Text('STAFF WORKFLOW', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: .7)),
-        const SizedBox(height: 8),
-        const Text('Use Requests to acknowledge, locate, board and complete passenger assistance. Station Duty groups active passengers by boarding station.', style: TextStyle(color: _muted, height: 1.4)),
+        Center(child: Text(staffName, style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w700))),
+        const SizedBox(height: 4),
+        const Center(child: Text('Railway Staff', style: TextStyle(color: _muted))),
+        const SizedBox(height: 22),
+        _profileTile(Icons.badge_outlined, 'Username', username.isEmpty ? 'Not provided' : username),
+        _profileTile(Icons.email_outlined, 'Email', email.isEmpty ? 'Not provided' : email),
+        _profileTile(Icons.phone_outlined, 'Phone', phone.isEmpty ? 'Not provided' : phone),
+        _profileTile(Icons.verified_user_outlined, 'Role', 'Staff'),
       ],
     );
   }
 
-  Widget _profileRow(IconData icon, String label, String? value) {
-    final text = value?.trim().isNotEmpty == true ? value!.trim() : 'Not provided';
+  Widget _profileTile(IconData icon, String title, String value) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(14)),
-      child: Row(children: [Icon(icon, color: _blue, size: 22), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 12, color: _muted)), const SizedBox(height: 2), Text(text, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w600))]))]),
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(16)),
+      child: ListTile(leading: Icon(icon, color: _blue), title: Text(title, style: const TextStyle(fontSize: 12, color: _muted)), subtitle: Text(value, style: const TextStyle(fontWeight: FontWeight.w600))),
     );
   }
 
   Future<void> _showFilterSheet() async {
     final options = ['All', 'Attention', 'Requested', 'At Station', 'In Progress', 'Assigned', 'Located', 'Boarding', 'Boarded', 'Completed', 'Escalated', 'Cancelled'];
-    final value = await showModalBottomSheet<String>(
+    final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: options.map((option) => RadioListTile<String>(value: option, groupValue: _filter, title: Text(option), onChanged: (value) => Navigator.pop(context, value))).toList(),
-        ),
+      builder: (sheetContext) => SafeArea(
+        child: ListView(shrinkWrap: true, children: options.map((option) => ListTile(
+          leading: Icon(option == _filter ? Icons.radio_button_checked : Icons.radio_button_off, color: option == _filter ? _blue : _muted),
+          title: Text(option),
+          onTap: () => Navigator.pop(sheetContext, option),
+        )).toList()),
       ),
     );
-    if (value != null) setState(() => _filter = value);
+    if (selected != null && mounted) setState(() => _filter = selected);
   }
 
   Future<void> _showSortSheet() async {
     final options = ['Priority', 'Passenger', 'Train'];
-    final value = await showModalBottomSheet<String>(
+    final selected = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: ListView(shrinkWrap: true, children: options.map((option) => RadioListTile<String>(value: option, groupValue: _sort, title: Text(option), onChanged: (value) => Navigator.pop(context, value))).toList()),
+      builder: (sheetContext) => SafeArea(
+        child: ListView(shrinkWrap: true, children: options.map((option) => ListTile(
+          leading: Icon(option == _sort ? Icons.radio_button_checked : Icons.radio_button_off, color: option == _sort ? _blue : _muted),
+          title: Text(option),
+          onTap: () => Navigator.pop(sheetContext, option),
+        )).toList()),
       ),
     );
-    if (value != null) setState(() => _sort = value);
+    if (selected != null && mounted) setState(() => _sort = selected);
   }
 
   void _openRequests(String filter) {
     setState(() {
-      _filter = filter;
       _tabIndex = 1;
-      _searchController.clear();
+      _filter = filter;
+      _expanded.clear();
     });
   }
 
   int _count(List<AssistanceRequest> requests, String status) => requests.where((r) => r.status == status).length;
 
-  static const _activeStatuses = {'Assigned', 'Located', 'Boarding', 'Boarded'};
+  static const _terminalStatuses = {'Completed', 'Cancelled', 'Escalated'};
 
-  ({Color color, IconData icon}) _statusStyle(String status) => switch (status) {
-        'Requested' => (color: Colors.orange.shade800, icon: Icons.hourglass_empty),
-        'At Station' => (color: Colors.deepOrange, icon: Icons.location_on),
-        'Assigned' => (color: _blue, icon: Icons.assignment_ind_outlined),
-        'Located' => (color: Colors.teal, icon: Icons.person_pin_circle_outlined),
-        'Boarding' => (color: Colors.indigo, icon: Icons.directions_walk_outlined),
-        'Boarded' => (color: Colors.green, icon: Icons.check_circle_outline),
-        'Completed' => (color: Colors.green.shade800, icon: Icons.done_all),
-        'Escalated' => (color: Colors.deepOrange, icon: Icons.warning_amber_outlined),
-        'Cancelled' => (color: Colors.grey, icon: Icons.cancel_outlined),
-        _ => (color: Colors.grey, icon: Icons.help_outline),
-      };
+  ({Color color, IconData icon}) _statusStyle(String status) {
+    switch (status) {
+      case 'At Station':
+        return (color: Colors.deepOrange, icon: Icons.location_on);
+      case 'Assigned':
+        return (color: _blue, icon: Icons.assignment_ind_outlined);
+      case 'Located':
+        return (color: Colors.teal, icon: Icons.person_pin_circle);
+      case 'Boarding':
+        return (color: Colors.indigo, icon: Icons.directions_walk);
+      case 'Boarded':
+        return (color: Colors.green, icon: Icons.check_circle_outline);
+      case 'Completed':
+        return (color: Colors.green.shade800, icon: Icons.done_all);
+      case 'Cancelled':
+        return (color: Colors.grey, icon: Icons.cancel_outlined);
+      case 'Escalated':
+        return (color: Colors.deepOrange.shade700, icon: Icons.warning_amber);
+      default:
+        return (color: Colors.orange.shade800, icon: Icons.hourglass_empty);
+    }
+  }
 }
 
 class _SectionLabel extends StatelessWidget {
@@ -658,5 +611,7 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel(this.text);
 
   @override
-  Widget build(BuildContext context) => Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: .8));
+  Widget build(BuildContext context) {
+    return Text(text, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: .8));
+  }
 }
