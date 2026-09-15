@@ -43,20 +43,9 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
     UserCredential? credential;
 
     try {
-      final existing = await FirebaseFirestore.instance
-          .collection('staff_requests')
-          .where('email', isEqualTo: email)
-          .where('status', whereIn: ['pending', 'approved'])
-          .limit(1)
-          .get();
-      if (existing.docs.isNotEmpty) {
-        _show('A staff request for this email already exists.', isError: true);
-        return;
-      }
-
-      // Create the real Firebase Authentication account now. The account
-      // remains unable to enter Staff Dashboard until an admin approves the
-      // corresponding Firestore staff request.
+      // Do not query staff_requests before authentication. Public applicants
+      // are not allowed to read that protected collection, which previously
+      // caused PERMISSION_DENIED before the account was even created.
       try {
         credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
           email: email,
@@ -92,9 +81,6 @@ class _StaffRegistrationScreenState extends State<StaffRegistrationScreen> {
       _show('Staff account created. An administrator must approve it before you can use Staff Login.');
       if (mounted) Navigator.of(context).pop();
     } on FirebaseException catch (e) {
-      // If Firestore fails after Auth account creation, leave the Auth account
-      // intact so the same email can be recovered rather than creating a
-      // second account. The admin can still inspect/remove it in Firebase.
       _show(e.message ?? 'Could not submit the staff request.', isError: true);
     } catch (e) {
       _show('Could not submit the staff request: $e', isError: true);
