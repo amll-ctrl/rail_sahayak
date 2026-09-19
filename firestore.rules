@@ -1,0 +1,136 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function admin() {
+      return signedIn() &&
+        (
+          (
+            exists(/databases/$(database)/documents/admin/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/admin/$(request.auth.uid)).data.role == 'admin' &&
+            get(/databases/$(database)/documents/admin/$(request.auth.uid)).data.approved == true
+          ) ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+          )
+        );
+    }
+
+    function staff() {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'staff' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved';
+    }
+
+    function ownEmail() {
+      return signedIn() &&
+        request.auth.token.email != null &&
+        resource.data.email == request.auth.token.email;
+    }
+
+    match /admin/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || admin());
+      allow list: if admin();
+      allow create, update, delete: if admin();
+    }
+
+    match /users/{uid} {
+      allow get: if signedIn() && (uid == request.auth.uid || admin() || staff());
+
+      // Used for approved staff lookup after Google has authenticated.
+      // The query must be constrained by the signed-in account's email.
+      allow list: if admin() || ownEmail();
+
+      // Normal passenger creation and pending staff applications create only
+      // the caller's own profile. A staff profile can only be created after
+      // an administrator has written a staff_approvals document for that email.
+      allow create: if signedIn() &&
+        uid == request.auth.uid &&
+        (
+          request.resource.data.role == 'passenger' ||
+          (
+            request.resource.data.role == 'staff' &&
+            request.resource.data.status == 'approved' &&
+            exists(
+              /databases/$(database)/documents/staff_approvals/$(request.auth.token.email)
+            )
+          )
+        );
+
+      // Users may edit their own profile, but cannot promote themselves,
+      // change approval state, or toggle the staff-application flag.
+      allow update: if admin() ||
+        (
+          signedIn() &&
+          uid == request.auth.uid &&
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.staffApplication == resource.data.staffApplication
+        );
+
+      allow delete: if admin();
+    }
+
+    match /staff_approvals/{email} {
+      allow get: if admin() ||
+        (signedIn() && request.auth.token.email == email);
+      allow list: if admin();
+      allow create, update, delete: if admin();
+    }
+
+    // Kept for legacy applications created before the new self-profile flow.
+    match /staff_requests/{requestId} {
+      allow get, list: if admin();
+      allow create: if signedIn() && request.resource.data.email == request.auth.token.email;
+      allow update, delete: if admin();
+    }
+
+    match /requests/{requestId} {
+      allow get: if signedIn() &&
+        (
+          admin() ||
+          staff() ||
+          resource.data.passengerId == request.auth.uid
+        );
+
+      allow list: if admin() || staff() ||
+        (
+          signedIn() &&
+          resource.data.passengerId == request.auth.uid
+        );
+
+      allow create: if signedIn() &&
+        request.resource.data.passengerId == request.auth.uid;
+
+      allow update: if admin() ||
+        (
+          staff() &&
+          request.resource.data.passengerId == resource.data.passengerId
+        ) ||
+        (
+          signedIn() &&
+          resource.data.passengerId == request.auth.uid &&
+          request.resource.data.passengerId == request.auth.uid
+        );
+
+      allow delete: if admin();
+    }
+
+    match /requests/{requestId}/events/{eventId} {
+      allow read: if admin() || staff() ||
+        (
+          signedIn() &&
+          get(/databases/$(database)/documents/requests/$(requestId)).data.passengerId == request.auth.uid
+        );
+      allow create: if admin() || staff();
+      allow update, delete: if false;
+    }
+  }
+}
