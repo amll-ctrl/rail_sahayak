@@ -22,5 +22,8 @@
         }
       }
     }
+  },
+  "firestore": {
+    "rules": "firestore.rules"
   }
 }
