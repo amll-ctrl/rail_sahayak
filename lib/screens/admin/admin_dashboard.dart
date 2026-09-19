@@ -80,6 +80,15 @@ class _AdminDashboardState extends State<AdminDashboard> {
         'approvedAt': FieldValue.serverTimestamp(),
       }, SetOptions(merge: true));
 
+      // Keep a deterministic approval record so an approved staff member
+      // using Google can create their own Firebase UID profile safely.
+      await FirebaseFirestore.instance.collection('staff_approvals').doc(email).set({
+        'email': email,
+        'uid': uid,
+        'approved': true,
+        'approvedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
       if (!mounted) return;
       final requestsFuture = _loadStaffRequests();
       final staffFuture = _loadApprovedStaff();
