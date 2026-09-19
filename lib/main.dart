@@ -47,7 +47,10 @@ class _RailSahayakBootstrapState extends State<RailSahayakBootstrap> {
       await Firebase.initializeApp(
         options: DefaultFirebaseOptions.currentPlatform,
       );
-      await GoogleSignIn.instance.initialize();
+      await GoogleSignIn.instance.initialize(
+        serverClientId:
+            '396156224056-o3fsqtogs2kfnaphssd9qo7s7299m9s3.apps.googleusercontent.com',
+      );
 
       try {
         await NotificationService.instance.initialize();
