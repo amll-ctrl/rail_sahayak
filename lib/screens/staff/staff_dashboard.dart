@@ -194,6 +194,8 @@ class _StaffDashboardState extends State<StaffDashboard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                _nextTaskCard(requests),
+                const SizedBox(height: 18),
                 const _SectionLabel("TODAY'S WORK"),
                 const SizedBox(height: 10),
                 GridView.count(
@@ -269,6 +271,147 @@ class _StaffDashboardState extends State<StaffDashboard> {
         ],
       ),
     );
+  }
+
+
+  Widget _nextTaskCard(List<AssistanceRequest> requests) {
+    final active = requests.where((r) => !_terminalStatuses.contains(r.status)).toList()
+      ..sort((a, b) => _priority(a.status).compareTo(_priority(b.status)));
+    if (active.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(17),
+        decoration: BoxDecoration(color: const Color(0xFFEAF5EC), borderRadius: BorderRadius.circular(17)),
+        child: const Row(
+          children: [
+            Icon(Icons.check_circle_outline, color: Colors.green, size: 27),
+            SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('You\'re all caught up', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+                SizedBox(height: 3),
+                Text('New assistance requests will appear here automatically.', style: TextStyle(color: _muted)),
+              ],
+            )),
+          ],
+        ),
+      );
+    }
+    final req = active.first;
+    final status = _statusStyle(req.status);
+    return Container(
+      decoration: BoxDecoration(
+        color: _surface,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: status.color.withValues(alpha: .35)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 15, 16, 10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.bolt, color: status.color, size: 23),
+              const SizedBox(width: 8),
+              const Text('NEXT TASK', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: .8)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+                decoration: BoxDecoration(color: status.color.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
+                child: Text(req.status, style: TextStyle(color: status.color, fontSize: 11, fontWeight: FontWeight.w800)),
+              ),
+            ]),
+            const SizedBox(height: 12),
+            Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text([
+              if (req.trainNo.isNotEmpty) 'Train \${req.trainNo}',
+              if (req.coach.isNotEmpty) req.coach,
+              if (req.seat != null) 'Seat \${req.seat}',
+            ].join(' • '),
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: _muted, fontWeight: FontWeight.w600)),
+            if (req.boardingStation.isNotEmpty || req.platform?.isNotEmpty == true || req.currentLocation?.isNotEmpty == true) ...[
+              const SizedBox(height: 7),
+              Text([
+                if (req.boardingStation.isNotEmpty) req.boardingStation,
+                if (req.platform?.isNotEmpty == true) 'Platform \${req.platform}',
+                if (req.currentLocation?.isNotEmpty == true) req.currentLocation!,
+              ].join(' • '),
+                maxLines: 2, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
+            ],
+            const SizedBox(height: 13),
+            _taskActionButton(req),
+            const SizedBox(height: 5),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () => _openRequests(req.status, expandedId: req.id),
+                icon: const Icon(Icons.open_in_new, size: 17),
+                label: const Text('View full request'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _taskActionButton(AssistanceRequest req) {
+    final action = _actionFor(req.status);
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton.icon(
+        onPressed: () => _advanceRequest(req),
+        icon: Icon(action.$2),
+        label: Text(action.$1),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: _blue,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(double.infinity, 48),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        ),
+      ),
+    );
+  }
+
+  (String, IconData) _actionFor(String status) => switch (status) {
+        'Requested' => ('Accept & Assign', Icons.assignment_ind_outlined),
+        'At Station' => ('Acknowledge & Assign', Icons.notifications_active),
+        'Assigned' => ('Passenger Located', Icons.person_pin_circle),
+        'Located' => ('Start Boarding', Icons.directions_walk),
+        'Boarding' => ('Confirm Passenger Boarded', Icons.check_circle),
+        'Boarded' => ('Complete Assistance', Icons.done_all),
+        _ => ('Update Request', Icons.arrow_forward),
+      };
+
+  Future<void> _advanceRequest(AssistanceRequest req) async {
+    final next = switch (req.status) {
+      'Requested' => 'Assigned',
+      'At Station' => 'Assigned',
+      'Assigned' => 'Located',
+      'Located' => 'Boarding',
+      'Boarding' => 'Boarded',
+      'Boarded' => 'Completed',
+      _ => null,
+    };
+    if (next == null) return;
+    try {
+      await AssistanceWorkflowService().updateStatus(req.id, next);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_successMessage(next)), backgroundColor: Colors.green),
+      );
+      setState(() {});
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not update request: \$e'), backgroundColor: Colors.red),
+      );
+    }
   }
 
   Widget _attentionBanner(int count) {
@@ -808,82 +951,18 @@ class _StaffDashboardState extends State<StaffDashboard> {
   }
 
   Widget _actionButton(AssistanceRequest req) {
-    final action = switch (req.status) {
-      'At Station' => (
-          'Acknowledge Request',
-          Icons.notifications_active,
-        ),
-      'Assigned' => (
-          'Passenger Located',
-          Icons.person_pin_circle,
-        ),
-      'Located' => (
-          'Start Boarding',
-          Icons.directions_walk,
-        ),
-      'Boarding' => (
-          'Confirm Passenger Boarded',
-          Icons.check_circle,
-        ),
-      'Boarded' => (
-          'Complete Assistance',
-          Icons.done_all,
-        ),
-      _ => (
-          'Accept & Assign',
-          Icons.assignment_ind_outlined,
-        ),
-    };
-
+    final action = _actionFor(req.status);
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton.icon(
-        onPressed: () async {
-          final next = switch (req.status) {
-            'Requested' => 'Assigned',
-            'At Station' => 'Assigned',
-            'Assigned' => 'Located',
-            'Located' => 'Boarding',
-            'Boarding' => 'Boarded',
-            'Boarded' => 'Completed',
-            _ => null,
-          };
-          if (next == null) return;
-          try {
-            await AssistanceWorkflowService().updateStatus(
-              req.id,
-              next,
-            );
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(_successMessage(next)),
-                backgroundColor: Colors.green,
-              ),
-            );
-          } catch (e) {
-            if (!mounted) return;
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Could not update request: $e'),
-                backgroundColor: Colors.red,
-              ),
-            );
-          }
-        },
+        onPressed: () => _advanceRequest(req),
         icon: Icon(action.$2),
-        label: Text(
-          action.$1,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        label: Text(action.$1, maxLines: 1, overflow: TextOverflow.ellipsis),
         style: ElevatedButton.styleFrom(
           backgroundColor: _blue,
           foregroundColor: Colors.white,
           minimumSize: const Size(double.infinity, 46),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(15),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
         ),
       ),
     );
