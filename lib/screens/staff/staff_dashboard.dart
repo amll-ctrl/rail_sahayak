@@ -327,9 +327,9 @@ class _StaffDashboardState extends State<StaffDashboard> {
               style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
             Text([
-              if (req.trainNo.isNotEmpty) 'Train \${req.trainNo}',
+              if (req.trainNo.isNotEmpty) 'Train ${req.trainNo}',
               if (req.coach.isNotEmpty) req.coach,
-              if (req.seat != null) 'Seat \${req.seat}',
+              if (req.seat != null) 'Seat ${req.seat}',
             ].join(' • '),
               maxLines: 1, overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: _muted, fontWeight: FontWeight.w600)),
@@ -337,7 +337,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
               const SizedBox(height: 7),
               Text([
                 if (req.boardingStation.isNotEmpty) req.boardingStation,
-                if (req.platform?.isNotEmpty == true) 'Platform \${req.platform}',
+                if (req.platform?.isNotEmpty == true) 'Platform ${req.platform}',
                 if (req.currentLocation?.isNotEmpty == true) req.currentLocation!,
               ].join(' • '),
                 maxLines: 2, overflow: TextOverflow.ellipsis,
@@ -409,7 +409,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not update request: \$e'), backgroundColor: Colors.red),
+        SnackBar(content: Text('Could not update request: $e'), backgroundColor: Colors.red),
       );
     }
   }
