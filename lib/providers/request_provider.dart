@@ -86,39 +86,114 @@ class RequestProvider extends ChangeNotifier {
 
   Future<void> _restoreSession() async {
     try {
-      final firebaseUser = _auth.currentUser; if (firebaseUser == null) return;
-      await firebaseUser.reload(); final refreshed = _auth.currentUser; if (refreshed == null) return;
-      final adminDoc = await _firestore.collection('admin').doc(refreshed.uid).get();
-      if (adminDoc.exists && adminDoc.data() != null) {
-        final data = adminDoc.data()!;
-        if (data['role']?.toString().toLowerCase() == 'admin' && data['approved'] == true) {
-          await setAdminSession(uid: refreshed.uid, data: data);
-          return;
-        }
-        await _auth.signOut();
-        return;
-      }
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser == null) return;
+
+      await firebaseUser.reload();
+      final refreshed = _auth.currentUser;
+      if (refreshed == null) return;
+
+      // Read the user's own profile first. Normal users should not need
+      // permission to read the admin collection during startup.
       final doc = await _firestore.collection('users').doc(refreshed.uid).get();
+
       if (doc.exists && doc.data() != null) {
         final data = doc.data()!;
         final rawProfile = UserProfile.fromMap(data, refreshed.uid);
-        final hydratedName = rawProfile.name.trim().isEmpty ? ((refreshed.displayName ?? '').trim().isNotEmpty ? refreshed.displayName!.trim() : 'RailSahayak User') : rawProfile.name;
-        final hydratedEmail = rawProfile.email.trim().isEmpty ? (refreshed.email ?? '') : rawProfile.email;
-        _currentUser = UserProfile(id: refreshed.uid, name: hydratedName, username: rawProfile.username, email: hydratedEmail, phone: rawProfile.phone, role: rawProfile.role, disabilityType: rawProfile.disabilityType, preferredAssistance: rawProfile.preferredAssistance);
-        if (rawProfile.name.trim().isEmpty || rawProfile.email.trim().isEmpty) {
-          await _firestore.collection('users').doc(refreshed.uid).set({'name': hydratedName, 'email': hydratedEmail, 'role': rawProfile.role == UserRole.staff ? 'staff' : 'passenger'}, SetOptions(merge: true));
+        final roleValue = data['role']?.toString().toLowerCase();
+
+        if (roleValue == 'admin') {
+          final approved = data['approved'] == true ||
+              data['status']?.toString().toLowerCase() == 'approved';
+          if (!approved) {
+            await _auth.signOut();
+            return;
+          }
+          await setAdminSession(uid: refreshed.uid, data: data);
+          return;
         }
+
+        final hydratedName = rawProfile.name.trim().isEmpty
+            ? ((refreshed.displayName ?? '').trim().isNotEmpty
+                ? refreshed.displayName!.trim()
+                : 'RailSahayak User')
+            : rawProfile.name;
+        final hydratedEmail = rawProfile.email.trim().isEmpty
+            ? (refreshed.email ?? '')
+            : rawProfile.email;
+
+        _currentUser = UserProfile(
+          id: refreshed.uid,
+          name: hydratedName,
+          username: rawProfile.username,
+          email: hydratedEmail,
+          phone: rawProfile.phone,
+          role: rawProfile.role,
+          disabilityType: rawProfile.disabilityType,
+          preferredAssistance: rawProfile.preferredAssistance,
+        );
+
+        if (rawProfile.name.trim().isEmpty || rawProfile.email.trim().isEmpty) {
+          await _firestore.collection('users').doc(refreshed.uid).set({
+            'name': hydratedName,
+            'email': hydratedEmail,
+            'role': rawProfile.role == UserRole.staff ? 'staff' : 'passenger',
+          }, SetOptions(merge: true));
+        }
+
         _needsProfileCompletion = _isProfileIncomplete(_currentUser!);
         if (!_needsProfileCompletion) await _startRequestListener();
-      } else if (refreshed.providerData.any((p) => p.providerId == 'google.com')) {
-        final name = (refreshed.displayName ?? '').trim().isEmpty ? 'Google User' : refreshed.displayName!.trim();
-        _currentUser = UserProfile(id: refreshed.uid, name: name, username: '', email: refreshed.email ?? '', phone: '', role: UserRole.passenger);
-        _pendingGoogleUser = refreshed; _pendingGoogleName = name; _pendingGoogleEmail = refreshed.email ?? ''; _needsProfileCompletion = true;
-      } else { await _auth.signOut(); }
-    } catch (e) { debugPrint('Session restore error: $e'); _currentUser = null; _needsProfileCompletion = false; }
-    finally { _isSessionInitialized = true; notifyListeners(); }
-  }
+        return;
+      }
 
+      // Legacy/admin accounts may exist only in the admin collection.
+      // Only make this broader lookup after the self-profile lookup failed.
+      try {
+        final adminDoc = await _firestore.collection('admin').doc(refreshed.uid).get();
+        if (adminDoc.exists && adminDoc.data() != null) {
+          final data = adminDoc.data()!;
+          if (data['role']?.toString().toLowerCase() == 'admin' &&
+              data['approved'] == true) {
+            await setAdminSession(uid: refreshed.uid, data: data);
+            return;
+          }
+          await _auth.signOut();
+          return;
+        }
+      } on FirebaseException catch (e) {
+        // A normal authenticated user may not be allowed to read admin.
+        if (e.code != 'permission-denied') rethrow;
+        debugPrint('Admin profile lookup skipped: ' + e.code);
+      }
+
+      if (refreshed.providerData.any((p) => p.providerId == 'google.com')) {
+        final name = (refreshed.displayName ?? '').trim().isEmpty
+            ? 'Google User'
+            : refreshed.displayName!.trim();
+        _currentUser = UserProfile(
+          id: refreshed.uid,
+          name: name,
+          username: '',
+          email: refreshed.email ?? '',
+          phone: '',
+          role: UserRole.passenger,
+        );
+        _pendingGoogleUser = refreshed;
+        _pendingGoogleName = name;
+        _pendingGoogleEmail = refreshed.email ?? '';
+        _needsProfileCompletion = true;
+      } else {
+        await _auth.signOut();
+      }
+    } catch (e) {
+      debugPrint('Session restore error: ' + e.toString());
+      _currentUser = null;
+      _needsProfileCompletion = false;
+    } finally {
+      _isSessionInitialized = true;
+      notifyListeners();
+    }
+  }
   Future<bool> _isStaffApproved(String email) async {
     final normalized = email.trim().toLowerCase();
     if (normalized.isEmpty) return false;
