@@ -257,7 +257,20 @@ class NotificationService {
         return;
       }
 
-      await _firestore.collection('users').doc(user.uid).set(
+      final userRef = _firestore.collection('users').doc(user.uid);
+      final profile = await userRef.get();
+
+      // Notification setup can run immediately after Firebase Auth changes,
+      // before the app has created the user's Firestore profile. Do not let
+      // that race produce a permission-denied write or profile-listener error.
+      if (!profile.exists) {
+        debugPrint(
+          'Skipping FCM token save: users/' + user.uid + ' does not exist yet.',
+        );
+        return;
+      }
+
+      await userRef.set(
         {
           'fcmToken': fcmToken,
           'fcmTokenUpdatedAt': FieldValue.serverTimestamp(),
