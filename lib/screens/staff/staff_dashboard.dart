@@ -354,6 +354,51 @@ class _StaffDashboardState extends State<StaffDashboard> {
     );
   }
 
+  Future<void> _showPhoneDialog(String phone) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Call passenger'),
+        content: Text('Passenger phone: $phone'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showLocationInfo(AssistanceRequest req) async {
+    final location = [
+      if (req.boardingStation.isNotEmpty)
+        'Boarding station: \${req.boardingStation}',
+      if (req.platform?.isNotEmpty == true)
+        'Platform: \${req.platform}',
+      if (req.currentLocation?.isNotEmpty == true)
+        'Current location: \${req.currentLocation}',
+      if (req.coach.isNotEmpty)
+        'Coach: \${req.coach}',
+    ].join('\n');
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Passenger location'),
+        content: Text(
+          location.isEmpty ? 'No location details provided.' : location,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _taskActionButton(AssistanceRequest req) {
     final action = _actionFor(req.status);
     return SizedBox(
