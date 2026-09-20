@@ -33,6 +33,7 @@ class _StaffDashboardState extends State<StaffDashboard> {
   late int _tabIndex;
   late String _filter;
   String _sort = 'Priority';
+  AssistanceRequest? _activeTask;
 
   static const _activeStatuses = {'Assigned', 'Located', 'Boarding', 'Boarded'};
   static const _terminalStatuses = {'Completed', 'Cancelled', 'Escalated'};
@@ -275,87 +276,80 @@ class _StaffDashboardState extends State<StaffDashboard> {
 
 
   Widget _nextTaskCard(List<AssistanceRequest> requests) {
-    final active = requests.where((r) => !_terminalStatuses.contains(r.status)).toList()
-      ..sort((a, b) => _priority(a.status).compareTo(_priority(b.status)));
-    if (active.isEmpty) {
+    final req = _activeTask ?? _nextActiveRequest(requests);
+    if (req == null) {
       return Container(
         padding: const EdgeInsets.all(17),
         decoration: BoxDecoration(color: const Color(0xFFEAF5EC), borderRadius: BorderRadius.circular(17)),
-        child: const Row(
-          children: [
-            Icon(Icons.check_circle_outline, color: Colors.green, size: 27),
-            SizedBox(width: 12),
-            Expanded(child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('You\'re all caught up', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                SizedBox(height: 3),
-                Text('New assistance requests will appear here automatically.', style: TextStyle(color: _muted)),
-              ],
-            )),
-          ],
-        ),
+        child: const Row(children: [
+          Icon(Icons.check_circle_outline, color: Colors.green, size: 27), SizedBox(width: 12),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('You\'re all caught up', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
+            SizedBox(height: 3),
+            Text('New assistance requests will appear here automatically.', style: TextStyle(color: _muted)),
+          ])),
+        ]),
       );
     }
-    final req = active.first;
     final status = _statusStyle(req.status);
+    final step = switch (req.status) {
+      'Requested' || 'At Station' => 0,
+      'Assigned' => 1,
+      'Located' => 2,
+      'Boarding' || 'Boarded' => 3,
+      'Completed' => 4,
+      _ => 0,
+    };
+    const labels = ['Accept', 'Locate', 'Board', 'Complete'];
     return Container(
-      decoration: BoxDecoration(
-        color: _surface,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: status.color.withValues(alpha: .35)),
-      ),
+      decoration: BoxDecoration(color: _surface, borderRadius: BorderRadius.circular(18), border: Border.all(color: status.color.withValues(alpha: .30))),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 15, 16, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(children: [
-              Icon(Icons.bolt, color: status.color, size: 23),
-              const SizedBox(width: 8),
-              const Text('NEXT TASK', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: .8)),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-                decoration: BoxDecoration(color: status.color.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)),
-                child: Text(req.status, style: TextStyle(color: status.color, fontSize: 11, fontWeight: FontWeight.w800)),
-              ),
-            ]),
-            const SizedBox(height: 12),
-            Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName,
-              maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 4),
-            Text([
-              if (req.trainNo.isNotEmpty) 'Train ${req.trainNo}',
-              if (req.coach.isNotEmpty) req.coach,
-              if (req.seat != null) 'Seat ${req.seat}',
-            ].join(' • '),
-              maxLines: 1, overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: _muted, fontWeight: FontWeight.w600)),
-            if (req.boardingStation.isNotEmpty || req.platform?.isNotEmpty == true || req.currentLocation?.isNotEmpty == true) ...[
-              const SizedBox(height: 7),
-              Text([
-                if (req.boardingStation.isNotEmpty) req.boardingStation,
-                if (req.platform?.isNotEmpty == true) 'Platform ${req.platform}',
-                if (req.currentLocation?.isNotEmpty == true) req.currentLocation!,
-              ].join(' • '),
-                maxLines: 2, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700)),
-            ],
-            const SizedBox(height: 13),
-            _taskActionButton(req),
-            const SizedBox(height: 5),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton.icon(
-                onPressed: () => _openRequests(req.status, expandedId: req.id),
-                icon: const Icon(Icons.open_in_new, size: 17),
-                label: const Text('View full request'),
-              ),
-            ),
+        padding: const EdgeInsets.fromLTRB(16, 15, 16, 12),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            Icon(Icons.assignment_turned_in_outlined, color: status.color, size: 23), const SizedBox(width: 8),
+            const Text('ACTIVE ASSISTANCE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: .8)),
+            const Spacer(),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: status.color.withValues(alpha: .10), borderRadius: BorderRadius.circular(20)), child: Text(req.status, style: TextStyle(color: status.color, fontSize: 11, fontWeight: FontWeight.w800))),
+          ]),
+          const SizedBox(height: 12),
+          Text(req.passengerName.isEmpty ? 'Passenger' : req.passengerName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 4),
+          Text([if (req.trainNo.isNotEmpty) 'Train ${req.trainNo}', if (req.coach.isNotEmpty) req.coach, if (req.seat != null) 'Seat ${req.seat}'].join(' • '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontWeight: FontWeight.w600)),
+          if (req.boardingStation.isNotEmpty || req.platform?.isNotEmpty == true || req.currentLocation?.isNotEmpty == true) ...[
+            const SizedBox(height: 7),
+            Text([if (req.boardingStation.isNotEmpty) req.boardingStation, if (req.platform?.isNotEmpty == true) 'Platform ${req.platform}', if (req.currentLocation?.isNotEmpty == true) req.currentLocation!].join(' • '), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)),
           ],
-        ),
+          const SizedBox(height: 14),
+          Row(children: List.generate(labels.length * 2 - 1, (i) {
+            if (i.isOdd) return const Expanded(child: Divider(thickness: 2));
+            final n = i ~/ 2;
+            final done = n < step;
+            return CircleAvatar(radius: 11, child: Icon(done ? Icons.check : (n == step ? Icons.circle : Icons.circle_outlined), size: 13));
+          })),
+          const SizedBox(height: 4),
+          Row(children: labels.map((x) => Expanded(child: Text(x, textAlign: TextAlign.center, style: const TextStyle(fontSize: 10, color: _muted, fontWeight: FontWeight.w600)))).toList()),
+          const SizedBox(height: 13),
+          Text(switch (req.status) {
+            'Requested' || 'At Station' => 'CURRENT STEP • Accept this request',
+            'Assigned' => 'CURRENT STEP • Locate the passenger',
+            'Located' => 'CURRENT STEP • Start boarding assistance',
+            'Boarding' => 'CURRENT STEP • Assist with boarding',
+            'Boarded' => 'CURRENT STEP • Complete assistance',
+            _ => 'CURRENT STEP',
+          }, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: .4)),
+          const SizedBox(height: 8),
+          _taskActionButton(req),
+          if (req.status == 'Assigned' || req.status == 'At Station') ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              Expanded(child: OutlinedButton.icon(onPressed: req.passengerPhone.isEmpty ? null : () => _showPhoneDialog(req.passengerPhone), icon: const Icon(Icons.phone_outlined, size: 18), label: const Text('Call Passenger'))),
+              const SizedBox(width: 8),
+              Expanded(child: OutlinedButton.icon(onPressed: () => _showLocationInfo(req), icon: const Icon(Icons.location_on_outlined, size: 18), label: const Text('Location'))),
+            ]),
+          ],
+          SizedBox(width: double.infinity, child: TextButton.icon(onPressed: () => _openRequests(req.status, expandedId: req.id), icon: const Icon(Icons.open_in_new, size: 17), label: const Text('View full request'))),
+        ]),
       ),
     );
   }
@@ -402,20 +396,29 @@ class _StaffDashboardState extends State<StaffDashboard> {
     try {
       await AssistanceWorkflowService().updateStatus(req.id, next);
       if (!mounted) return;
-
-      // Return to Home so the Next Task card immediately exposes
-      // the next action in the assistance workflow.
-      if (_tabIndex != 0) {
-        _navigateToTab(0);
-      } else {
-        setState(() {});
-      }
+      final provider = context.read<RequestProvider>();
+      setState(() {
+        _activeTask = next == 'Completed' ? _nextActiveRequest(provider.staffRequests) : _findRequest(provider.staffRequests, req.id);
+      });
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Could not update request: $e'), backgroundColor: Colors.red),
       );
     }
+  }
+
+  AssistanceRequest? _findRequest(List<AssistanceRequest> requests, String id) {
+    for (final request in requests) {
+      if (request.id == id) return request;
+    }
+    return null;
+  }
+
+  AssistanceRequest? _nextActiveRequest(List<AssistanceRequest> requests) {
+    final active = requests.where((r) => !_terminalStatuses.contains(r.status)).toList()
+      ..sort((a, b) => _priority(a.status).compareTo(_priority(b.status)));
+    return active.isEmpty ? null : active.first;
   }
 
   Widget _attentionBanner(int count) {
