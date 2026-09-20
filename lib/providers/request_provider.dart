@@ -85,6 +85,17 @@ class RequestProvider extends ChangeNotifier {
   Future<void> completePassengerSignupSession(UserProfile user) async { _currentUser = user; _needsProfileCompletion = false; _clearPendingGoogleProfile(); _isSessionInitialized = true; await _startRequestListener(); notifyListeners(); }
 
   Future<void> _restoreSession() async {
+    // A slow/offline Firestore lookup must never leave the app on the splash.
+    try {
+      await _restoreSessionInternal().timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      debugPrint('Session restore timed out; continuing signed out.');
+      _currentUser = null;
+      _needsProfileCompletion = false;
+    }
+  }
+
+  Future<void> _restoreSessionInternal() async {
     try {
       final firebaseUser = _auth.currentUser;
       if (firebaseUser == null) return;
