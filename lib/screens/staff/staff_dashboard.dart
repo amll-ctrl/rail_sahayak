@@ -402,10 +402,14 @@ class _StaffDashboardState extends State<StaffDashboard> {
     try {
       await AssistanceWorkflowService().updateStatus(req.id, next);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(_successMessage(next)), backgroundColor: Colors.green),
-      );
-      setState(() {});
+
+      // Return to Home so the Next Task card immediately exposes
+      // the next action in the assistance workflow.
+      if (_tabIndex != 0) {
+        _navigateToTab(0);
+      } else {
+        setState(() {});
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
