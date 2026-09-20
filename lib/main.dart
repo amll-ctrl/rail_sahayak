@@ -52,11 +52,13 @@ class _RailSahayakBootstrapState extends State<RailSahayakBootstrap> {
             '396156224056-o3fsqtogs2kfnaphssd9qo7s7299m9s3.apps.googleusercontent.com',
       );
 
-      try {
-        await NotificationService.instance.initialize();
-      } catch (e) {
-        debugPrint('Notification initialization failed: $e');
-      }
+      // Notifications are non-critical for getting the app to the login
+      // screen. Do not let Android notification/FCM setup hold the splash.
+      unawaited(
+        NotificationService.instance.initialize().catchError((Object e) {
+          debugPrint('Notification initialization failed: $e');
+        }),
+      );
 
       final elapsed = DateTime.now().difference(_startupStartedAt);
       final remaining = _minimumSplashDuration - elapsed;
